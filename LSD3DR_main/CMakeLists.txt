@@ -39,7 +39,7 @@ if(CUDA_FOUND)
   include_directories(${CUDA_INCLUDE_DIRS})
 endif()
 
-find_package(VTK 5.8)
+find_package(VTK)
 if(VTK_FOUND)
   include_directories(${VTK_INCLUDE_DIRS})
 endif()

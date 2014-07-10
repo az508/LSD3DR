@@ -42,7 +42,7 @@ if(CUDA_FOUND)
   target_link_libraries( ${PROJECT_NAME} ${CUDA_LIBRARIES})
 endif()
 
-find_package(VTK 5.8)
+find_package(VTK)
 if(VTK_FOUND)
   include_directories(${VTK_INCLUDE_DIRS})
   target_link_libraries( ${PROJECT_NAME} ${VTK_LIBRARIES})
