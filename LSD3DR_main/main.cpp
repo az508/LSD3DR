@@ -6,6 +6,7 @@
 #include <vector>
 #include <string>
 #include <memory>
+#include <err.h>
 
 #include <cv.hpp> //!< OpenCV C++ class. not "cv.h" which is for C.
 
@@ -20,6 +21,8 @@
 #include <pcl/console/parse.h>
 #include <pcl/filters/radius_outlier_removal.h>
 #include <pcl/filters/voxel_grid.h>
+//#include "tracklets.h"
+
 
 float NCC(cv::Mat& currentFrame, cv::Mat& targetFrame, cv::Mat& curPixel, cv::Mat& tarPixel,int patchSize)
 {
@@ -47,6 +50,41 @@ float NCC(cv::Mat& currentFrame, cv::Mat& targetFrame, cv::Mat& curPixel, cv::Ma
 };
 
 
+	
+void loadCalibrationKITTI(std::string infile, float baseline, float focus, float u0, float v0 )
+{
+	// calib_cam_to_cam.txt: Camera-to-camera calibration
+	// --------------------------------------------------
+	// 
+	//   - S_xx: 1x2 size of image xx before rectification
+	//   - K_xx: 3x3 calibration matrix of camera xx before rectification
+	//   - D_xx: 1x5 distortion vector of camera xx before rectification
+	//   - R_xx: 3x3 rotation matrix of camera xx (extrinsic)
+	//   - T_xx: 3x1 translation vector of camera xx (extrinsic)
+	//   - S_rect_xx: 1x2 size of image xx after rectification
+	//   - R_rect_xx: 3x3 rectifying rotation to make image planes co-planar
+	//   - P_rect_xx: 3x4 projection matrix after rectification
+	// 
+	// Note: When using this dataset you will most likely need to access only
+	// P_rect_xx, as this matrix is valid for the rectified image sequences.
+	
+	// load calibration file
+	fstream input(infile.c_str(), ios::in);
+	if(!input.good()){
+		cerr << "Could not read file: " << infile << endl;
+		exit(EXIT_FAILURE);
+	}
+	
+	// read matrix P, for the two colored camera
+	
+	input.close();
+};
+
+
+void loadPositionKITTI(std::string infile, std::vector<cv::Mat>& rotationList, std::vector<cv::Mat>& translationList)
+{
+
+};
 
 
 int main( int /*argc*/, char** /*argv*/ )
@@ -56,11 +94,15 @@ int main( int /*argc*/, char** /*argv*/ )
     //Load calibration matrix, camera position, 
     //and image pairs. Init variables.
     //*******************************************
-    std::vector<cv::Mat> cameraPositionList;
+    std::string infile;
     
     //!< load camera calibration info
 	//need to learn about the format of KITTI
-	
+	float baseline;
+	float focus;
+	float u0;
+	float v0;
+	loadCalibrationKITTI(infile, baseline, focus, u0, v0 );
   
 
     //!< load camera position info
@@ -68,6 +110,7 @@ int main( int /*argc*/, char** /*argv*/ )
 	cv::Mat translation(1, 3, CV_32F);
 	std::vector<cv::Mat> rotationList;
 	std::vector<cv::Mat> translationList;
+	loadPositionKITTI(infile, rotationList, translationList);
 	
 	
 	//!< load image pairs
@@ -75,15 +118,58 @@ int main( int /*argc*/, char** /*argv*/ )
 	std::vector<cv::Mat> LRefectedList;
 	std::vector<cv::Mat> RRefectedList;
 	std::vector<cv::Mat> LNormalizedList;
+	
+	
+	//!<load images obtained by left color camera
+	{
+		std::string dirname = "/home/zhao/Project/KITTI/2011_09_26/2011_09_26_drive_0002_sync/image_02/data/";
+		struct dirent **namelist;
+		int fileNum = scandir(dirname.c_str(), &namelist, NULL, alphasort);
+		if(fileNum == -1) {
+			err(EXIT_FAILURE, "%s", dirname.c_str());
+		}
+		//(void) printf ("%d\n", fileNum);
+		for (int i = 2; i < fileNum; ++i) 
+		{
+			//(void) printf("%s\n", namelist[i]->d_name);
+			
+			//std::cout<<dirname + namelist[i]->d_name<<std::endl;
+			cv::Mat pic = cv::imread(dirname + namelist[i]->d_name, 1);
+			LRefectedList.push_back(pic);
+			
+			free(namelist[i]);
+		}
+		free(namelist);
+	}
+	
+	
+	//!<load images obtained by right color camera
+	{
+		std::string dirname = "/home/zhao/Project/KITTI/2011_09_26/2011_09_26_drive_0002_sync/image_03/data/";
+		struct dirent **namelist;
+		int fileNum = scandir(dirname.c_str(), &namelist, NULL, alphasort);
+		if(fileNum == -1) {
+			err(EXIT_FAILURE, "%s", dirname.c_str());
+		}
+		//(void) printf ("%d\n", fileNum);
+		for (int i = 2; i < fileNum; ++i) 
+		{
+			//(void) printf("%s\n", namelist[i]->d_name);
+			
+			//std::cout<<dirname + namelist[i]->d_name<<std::endl;
+			cv::Mat pic = cv::imread(dirname + namelist[i]->d_name, 1);
+			RRefectedList.push_back(pic);
+			
+			free(namelist[i]);
+		}
+		free(namelist);
+	}
+	
+	return 0;
     
 
 	//!< init variables
-	cv::Mat imageDisparity(480, 640, CV_32F);
-	cv::Mat leftRefected(480, 640, CV_32F);
-	cv::Mat rightRefected(480, 640, CV_32F);
-	cv::Mat leftNormalized(480, 640, CV_32F);
-
-    
+	
 	Elas::parameters param;
 	param.postprocess_only_left = true;
 	param.disp_min = 0;
@@ -91,19 +177,13 @@ int main( int /*argc*/, char** /*argv*/ )
 	const int32_t dims[3] = {640, 480, 640};
 	Elas elas( param );
 	
-	float baseline;
-	float focus;
-	float u0;
-	float v0;
-
 	//init paramaters
-	float Tcov;
-	float Tdist;
-	float Tphoto;
-	float patchSize;
-	float pointingError;
-	float matchingError;
-	int reprojectNum;
+	float Tcov = 0.5;
+	float Tdist = 0.5;
+	float Tphoto = 0.7;
+	float patchSize = 7;
+	float pointingError = 0.5;
+	float matchingError = 1.0;
 	
 	
 	pcl::PointCloud<pcl::PointXYZRGB> globalCloud;
@@ -134,6 +214,7 @@ int main( int /*argc*/, char** /*argv*/ )
 		//*******************************************
 		//Dense stereo matching by ELAS
 		//*******************************************
+		cv::Mat imageDisparity;
 		cv::Mat& leftRefected = LRefectedList.at(framecnt);
 		cv::Mat& rightRefected = RRefectedList.at(framecnt);
 		elas.process(leftRefected.data, rightRefected.data, (float*)imageDisparity.data,(float*)imageDisparity.data, dims);
@@ -143,6 +224,25 @@ int main( int /*argc*/, char** /*argv*/ )
 		//!<record m frames into list, choose the center one as keyframe, do sth
 		//!<once finished, discard the list and wait for new m frames
 		disparityList.push_back(imageDisparity);
+		
+		
+		
+		//*******************************************
+		//claculate the Normalized zero mean and unit variance 
+		//left rectified RGB image
+		//*******************************************
+		//!<convert color image to grey scale 
+		cv::Mat gray;
+		cv::Mat grayNormalized;
+		cv::cvtColor(leftRefected,gray,CV_BGR2GRAY);
+		cv::Scalar mean = cv::mean(gray);
+		gray = gray - mean;
+		
+		double minVal, maxVal;
+		minMaxLoc( gray, &minVal, &maxVal );
+		gray.convertTo(grayNormalized, CV_32F, 1/(maxVal - minVal), -0.5f);
+		
+		LNormalizedList.push_back(grayNormalized);
 		
 		if (framecnt % m != 0)
 			continue;
@@ -159,7 +259,7 @@ int main( int /*argc*/, char** /*argv*/ )
 				//Geometric check
 				//*******************************************
 				
-				float p = LRefectedList[framecnt - m + r].at<float>(i, j);
+				//float p = LRefectedList[framecnt - m + r].at<float>(i, j);
 				float d = disparityList[framecnt - m + r].at<float>(i, j);
 				
 				//!<compute 3D point
@@ -265,14 +365,17 @@ int main( int /*argc*/, char** /*argv*/ )
 					float z1 = globalCloud.at(j).z;
 					float dis = (x-x1) * (x-x1) + (y-y1) * (y-y1) + (z-z1) * (z-z1);
 					if (dis < mindist)
-						dis = mindist;
+						mindist = dis;
 				}
+				if (mindist > Tdist)
+					continue;
 				
 				
 				
 				//*******************************************
 				//Photometric check
 				//*******************************************
+				//Let's do this with a grey scale image first
 				std::vector<float> NCCSList;
 				std::vector<cv::Vec3b> colorList;
 				float gp = 0;
@@ -304,7 +407,7 @@ int main( int /*argc*/, char** /*argv*/ )
 					Ui = K * (rotation * (Yi - translation) );
 					curPixel = Ui;
 				
-					float NCCScore = NCC(LNormalizedList.at(framecnt), LNormalizedList.at(framecnt - m + k), curPixel, tarPixel, patchSize);
+					float NCCScore = NCC(LNormalizedList.at(framecnt -m + r), LNormalizedList.at(framecnt - m + k), curPixel, tarPixel, patchSize);
 					gp = gp + NCCScore;
 					
 				}
