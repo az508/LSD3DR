@@ -51,7 +51,7 @@ float NCC(cv::Mat& currentFrame, cv::Mat& targetFrame, cv::Mat& curPixel, cv::Ma
 
 
 	
-void loadCalibrationKITTI(std::string infile, float& baseline, float& focus, float& u0, float& v0, cv::Mat& R0t2, cv::Mat& T0t2, cv::Mat& Rrect2 )
+void loadCalibrationKITTI(std::string infile, float& baseline, float& focus, float& u0, float& v0, cv::Mat& R_cam0grayTOcam2color, cv::Mat& T_cam0grayTOcam2color, cv::Mat& R_cam2TOrectcam2 )
 {
 	// calib_cam_to_cam.txt: Camera-to-camera calibration
 	// --------------------------------------------------
@@ -110,14 +110,14 @@ void loadCalibrationKITTI(std::string infile, float& baseline, float& focus, flo
 		{
 			for (int j = 0; j < 3; j++)
 			{
-				input >> R0t2.at<float>(i, j);
+				input >> R_cam0grayTOcam2color.at<float>(i, j);
 			}
 		}
 		//read T
 		input >> matrixName;
 		for (int i = 0; i < 3; i++)
 		{
-			input >> T0t2.at<float>(0, i);
+			input >> T_cam0grayTOcam2color.at<float>(0, i);
 		}
 		std::getline(input, line);//to next line
 		std::getline(input, line);//skip Sr
@@ -128,7 +128,7 @@ void loadCalibrationKITTI(std::string infile, float& baseline, float& focus, flo
 		{
 			for (int j = 0; j < 3; j++)
 			{
-				input >> Rrect2.at<float>(i, j);
+				input >> R_cam2TOrectcam2.at<float>(i, j);
 			}
 		}
 		
@@ -197,13 +197,13 @@ int main( int /*argc*/, char** /*argv*/ )
 	float focus;
 	float u0;
 	float v0;
-	cv::Mat R0t2(3, 3, CV_32F);
-	cv::Mat Rrect2(3, 3, CV_32F);
-	cv::Mat T0t2(1, 3, CV_32F);
-	loadCalibrationKITTI(infile, baseline, focus, u0, v0, R0t2, T0t2, Rrect2 );
+	cv::Mat R_cam0grayTOcam2color(3, 3, CV_32F);
+	cv::Mat R_cam2TOrectcam2(3, 3, CV_32F);
+	cv::Mat T_cam0grayTOcam2color(1, 3, CV_32F);
+	loadCalibrationKITTI(infile, baseline, focus, u0, v0, R_cam0grayTOcam2color, T_cam0grayTOcam2color, R_cam2TOrectcam2 );
 	std::cout<<" calib_cam_to_cam.txt loaded. "<<endl;
-	//std::cout<<" R0t2: "<<endl<<R0t2<<endl;
-	//std::cout<<" Rrect2: "<<endl<<Rrect2<<endl;
+	//std::cout<<" R_cam0grayTOcam2color: "<<endl<<R_cam0grayTOcam2color<<endl;
+	//std::cout<<" R_cam2TOrectcam2: "<<endl<<R_cam2TOrectcam2<<endl;
   
     //!< load camera position info
 	std::vector<cv::Mat> rotationList;
@@ -212,8 +212,8 @@ int main( int /*argc*/, char** /*argv*/ )
 	
 	//!<get other calibration information
 	//first imu to velo
-	cv::Mat Ri2v(3, 3, CV_32F);
-	cv::Mat Ti2v(1, 3, CV_32F);
+	cv::Mat R_imu2velo(3, 3, CV_32F);
+	cv::Mat T_imu2velo(1, 3, CV_32F);
 	{
 		std::string infile = "/home/zhao/Project/KITTI/2011_09_26/calib_imu_to_velo.txt" ;
 		fstream input(infile.c_str(), ios::in);
@@ -230,24 +230,24 @@ int main( int /*argc*/, char** /*argv*/ )
 		{
 			for (int j = 0; j < 3; j++)
 			{
-				input >> Ri2v.at<float>(i, j);
+				input >> R_imu2velo.at<float>(i, j);
 			}
 		}
 		
 		input >> matrixName;
 		for (int i = 0; i < 3; i++)
 		{
-			input >> Ti2v.at<float>(0, i);
+			input >> T_imu2velo.at<float>(0, i);
 		}
 		
 		input.close();
 	}
 	std::cout<<" calib_imu_to_velo.txt loaded. "<<endl;
-	//std::cout<<" Ri2v: "<<endl<<Ri2v<<endl;
+	//std::cout<<" R_imu2velo: "<<endl<<R_imu2velo<<endl;
 	
 	//then velo to camera
-	cv::Mat Rv2c(3, 3, CV_32F);
-	cv::Mat Tv2c(1, 3, CV_32F);
+	cv::Mat R_velo2cam0(3, 3, CV_32F);
+	cv::Mat T_velo2cam0(1, 3, CV_32F);
 	{
 		std::string infile = "/home/zhao/Project/KITTI/2011_09_26/calib_velo_to_cam.txt" ;
 		fstream input(infile.c_str(), ios::in);
@@ -264,20 +264,20 @@ int main( int /*argc*/, char** /*argv*/ )
 		{
 			for (int j = 0; j < 3; j++)
 			{
-				input >> Rv2c.at<float>(i, j);
+				input >> R_velo2cam0.at<float>(i, j);
 			}
 		}
 		
 		input >> matrixName;
 		for (int i = 0; i < 3; i++)
 		{
-			input >> Tv2c.at<float>(0, i);
+			input >> T_velo2cam0.at<float>(0, i);
 		}
 		
 		input.close();
 	}
 	std::cout<<" calib_velo_to_cam.txt loaded. "<<endl;
-	//std::cout<<" Rv2c: "<<endl<<Rv2c<<endl;
+	//std::cout<<" R_velo2cam0: "<<endl<<R_velo2cam0<<endl;
 	
 	//!<get camera position by translate velodyne position
 	/*******************************************************************
@@ -342,16 +342,18 @@ int main( int /*argc*/, char** /*argv*/ )
 			
 			//!< converts lat/lon coordinates to mercator coordinates using mercator scale
 
-			const float er = 6378137;
-			float mx = scale * lon * M_PI * er / 180;
-			float my = scale * er * log( tan((90+lat) * M_PI / 360) );
+			const float er = 6378137; //!< Earth radius [m]
+			float mx = scale * er * (lon * M_PI / 180);
+			float my = scale * er * log( tan( (90+lat) * M_PI / 360) );
+			//!< (mx,my): is the location of IMU/GPS in the mercator map. The world coordinate system is based on the mercator map.
 			
-			cv::Mat rotation(3, 3, CV_32F);
-			cv::Mat translation(1, 3, CV_32F);
+			//!< R,T between IMU/GPS coordinate system from i-th frame to the 1st frame
+			cv::Mat R_imu2imu0(3, 3, CV_32F);
+			cv::Mat T_imu2imu0(1, 3, CV_32F);
 			
-			translation.at<float>(0, 0) = mx;
-			translation.at<float>(0, 1) = my;
-			translation.at<float>(0, 2) = alt;
+			T_imu2imu0.at<float>(0, 0) = mx;
+			T_imu2imu0.at<float>(0, 1) = my;
+			T_imu2imu0.at<float>(0, 2) = alt; //!< hight from the sea level? [m]
 			//std::cout<<translation<<endl;
 			
 			
@@ -363,66 +365,70 @@ int main( int /*argc*/, char** /*argv*/ )
 			cv::Mat Rx = (cv::Mat_<float>(3,3) << 1, 0, 0, 0, cos(rx), -sin(rx), 0, sin(rx), cos(rx));// base => nav  (level oxts => rotated oxts)
 			cv::Mat Ry = (cv::Mat_<float>(3,3) << cos(ry), 0, sin(ry), 0, 1, 0, -sin(ry), 0, cos(ry));// base => nav  (level oxts => rotated oxts)
 			cv::Mat Rz = (cv::Mat_<float>(3,3) << cos(rz), -sin(rz), 0, sin(rz), cos(rz), 0, 0, 0, 1);// base => nav  (level oxts => rotated oxts)
-			rotation = Rz*Ry*Rx;
+			R_imu2imu0 = Rz*Ry*Rx;
 			//std::cout<<rotation<<endl;
 			
 			//!< Now let's translate this IMUGPS position to left camera's
 			{
-				cv::Mat Hi2v = (cv::Mat_<float>(4,4) <<  Ri2v.at<float>(0, 0), Ri2v.at<float>(0, 1), Ri2v.at<float>(0, 2), Ti2v.at<float>(0, 0),
-														Ri2v.at<float>(1, 0), Ri2v.at<float>(1, 1), Ri2v.at<float>(1, 2), Ti2v.at<float>(0, 1),
-														Ri2v.at<float>(2, 0), Ri2v.at<float>(2, 1), Ri2v.at<float>(2, 2), Ti2v.at<float>(0, 2),
+				cv::Mat H_imu2velo = (cv::Mat_<float>(4,4) <<  R_imu2velo.at<float>(0, 0), R_imu2velo.at<float>(0, 1), R_imu2velo.at<float>(0, 2), T_imu2velo.at<float>(0, 0),
+														R_imu2velo.at<float>(1, 0), R_imu2velo.at<float>(1, 1), R_imu2velo.at<float>(1, 2), T_imu2velo.at<float>(0, 1),
+														R_imu2velo.at<float>(2, 0), R_imu2velo.at<float>(2, 1), R_imu2velo.at<float>(2, 2), T_imu2velo.at<float>(0, 2),
 														0, 0, 0, 1 );
 				
-				cv::Mat Hv2c = (cv::Mat_<float>(4,4) <<  Rv2c.at<float>(0, 0), Rv2c.at<float>(0, 1), Rv2c.at<float>(0, 2), Tv2c.at<float>(0, 0),
-														Rv2c.at<float>(1, 0), Rv2c.at<float>(1, 1), Rv2c.at<float>(1, 2), Tv2c.at<float>(0, 1),
-														Rv2c.at<float>(2, 0), Rv2c.at<float>(2, 1), Rv2c.at<float>(2, 2), Tv2c.at<float>(0, 2),
+				cv::Mat H_velo2cam0 = (cv::Mat_<float>(4,4) <<  R_velo2cam0.at<float>(0, 0), R_velo2cam0.at<float>(0, 1), R_velo2cam0.at<float>(0, 2), T_velo2cam0.at<float>(0, 0),
+														R_velo2cam0.at<float>(1, 0), R_velo2cam0.at<float>(1, 1), R_velo2cam0.at<float>(1, 2), T_velo2cam0.at<float>(0, 1),
+														R_velo2cam0.at<float>(2, 0), R_velo2cam0.at<float>(2, 1), R_velo2cam0.at<float>(2, 2), T_velo2cam0.at<float>(0, 2),
 														0, 0, 0, 1 );
 				
-				cv::Mat  H0t2 = (cv::Mat_<float>(4,4) <<  R0t2.at<float>(0, 0), R0t2.at<float>(0, 1), R0t2.at<float>(0, 2), T0t2.at<float>(0, 0),
-														R0t2.at<float>(1, 0), R0t2.at<float>(1, 1), R0t2.at<float>(1, 2), T0t2.at<float>(0, 1),
-														R0t2.at<float>(2, 0), R0t2.at<float>(2, 1), R0t2.at<float>(2, 2), T0t2.at<float>(0, 2),
+				cv::Mat  H_cam0grayTOcam2color = (cv::Mat_<float>(4,4) <<  R_cam0grayTOcam2color.at<float>(0, 0), R_cam0grayTOcam2color.at<float>(0, 1), R_cam0grayTOcam2color.at<float>(0, 2), T_cam0grayTOcam2color.at<float>(0, 0),
+														R_cam0grayTOcam2color.at<float>(1, 0), R_cam0grayTOcam2color.at<float>(1, 1), R_cam0grayTOcam2color.at<float>(1, 2), T_cam0grayTOcam2color.at<float>(0, 1),
+														R_cam0grayTOcam2color.at<float>(2, 0), R_cam0grayTOcam2color.at<float>(2, 1), R_cam0grayTOcam2color.at<float>(2, 2), T_cam0grayTOcam2color.at<float>(0, 2),
 														0, 0, 0, 1 );
 				
-				cv::Mat  Hrect2 = (cv::Mat_<float>(4,4) <<  Rrect2.at<float>(0, 0), Rrect2.at<float>(0, 1), Rrect2.at<float>(0, 2), 0,
-														Rrect2.at<float>(1, 0), Rrect2.at<float>(1, 1), Rrect2.at<float>(1, 2), 0,
-														Rrect2.at<float>(2, 0), Rrect2.at<float>(2, 1), Rrect2.at<float>(2, 2), 0,
+				cv::Mat  H_cam2TOrectcam2 = (cv::Mat_<float>(4,4) <<  R_cam2TOrectcam2.at<float>(0, 0), R_cam2TOrectcam2.at<float>(0, 1), R_cam2TOrectcam2.at<float>(0, 2), 0,
+														R_cam2TOrectcam2.at<float>(1, 0), R_cam2TOrectcam2.at<float>(1, 1), R_cam2TOrectcam2.at<float>(1, 2), 0,
+														R_cam2TOrectcam2.at<float>(2, 0), R_cam2TOrectcam2.at<float>(2, 1), R_cam2TOrectcam2.at<float>(2, 2), 0,
 														0, 0, 0, 1 );
 				
-				cv::Mat  Hw2i = (cv::Mat_<float>(4,4) <<  rotation.at<float>(0, 0), rotation.at<float>(0, 1), rotation.at<float>(0, 2), translation.at<float>(0, 0),
-														rotation.at<float>(1, 0), rotation.at<float>(1, 1), rotation.at<float>(1, 2), translation.at<float>(0, 1),
-														rotation.at<float>(2, 0), rotation.at<float>(2, 1), rotation.at<float>(2, 2), translation.at<float>(0, 2),
+				cv::Mat  H_imu2imu0 = (cv::Mat_<float>(4,4) <<  R_imu2imu0.at<float>(0, 0), R_imu2imu0.at<float>(0, 1), R_imu2imu0.at<float>(0, 2), T_imu2imu0.at<float>(0, 0),
+														R_imu2imu0.at<float>(1, 0), R_imu2imu0.at<float>(1, 1), R_imu2imu0.at<float>(1, 2), T_imu2imu0.at<float>(0, 1),
+														R_imu2imu0.at<float>(2, 0), R_imu2imu0.at<float>(2, 1), R_imu2imu0.at<float>(2, 2), T_imu2imu0.at<float>(0, 2),
 														0, 0, 0, 1 );
 				
 				
 				//now this matrix will trans ith frame's point(scanner frame) into world's frame(first frame's coordinate)
 				
-				cv::Mat  Hi2c2(4, 4, CV_32F);
-				Hi2c2 = Hrect2 * H0t2 * Hv2c * Hi2v * Hw2i;
-				//transformList.push_back(Hi2c2);
+				cv::Mat  H_imu0TOrectcam2(4, 4, CV_32F);
+				H_imu0TOrectcam2 = H_cam2TOrectcam2 * H_cam0grayTOcam2color * H_velo2cam0 * H_imu2velo * H_imu2imu0;
+				//transformList.push_back(H_imu0TOrectcam2);
+				
+				cv::Mat T_imu0TOrectcam2(1, 3, CV_32F);
+				T_imu0TOrectcam2.at<float>(0, 0) = H_imu0TOrectcam2.at<float>(0, 3);
+				T_imu0TOrectcam2.at<float>(0, 1) = H_imu0TOrectcam2.at<float>(1, 3);
+				T_imu0TOrectcam2.at<float>(0, 2) = H_imu0TOrectcam2.at<float>(2, 3);
+				
+				cv::Mat R_imu0TOrectcam2(3, 3, CV_32F);
+				R_imu0TOrectcam2.at<float>(0, 0) = H_imu0TOrectcam2.at<float>(0, 0);
+				R_imu0TOrectcam2.at<float>(0, 1) = H_imu0TOrectcam2.at<float>(0, 1);
+				R_imu0TOrectcam2.at<float>(0, 2) = H_imu0TOrectcam2.at<float>(0, 2);
+				R_imu0TOrectcam2.at<float>(1, 0) = H_imu0TOrectcam2.at<float>(1, 0);
+				R_imu0TOrectcam2.at<float>(1, 1) = H_imu0TOrectcam2.at<float>(1, 1);
+				R_imu0TOrectcam2.at<float>(1, 2) = H_imu0TOrectcam2.at<float>(1, 2);
+				R_imu0TOrectcam2.at<float>(2, 0) = H_imu0TOrectcam2.at<float>(2, 0);
+				R_imu0TOrectcam2.at<float>(2, 1) = H_imu0TOrectcam2.at<float>(2, 1);
+				R_imu0TOrectcam2.at<float>(2, 2) = H_imu0TOrectcam2.at<float>(2, 2);
+				
+				//now Pc_i = H_imu0TOrectcam2 * Pw, so for Pw we need Pw = H_imu0TOrectcam2.inv() * Pc_i
 				
 				
-				translation.at<float>(0, 0) = Hi2c2.at<float>(0, 3);
-				translation.at<float>(0, 1) = Hi2c2.at<float>(1, 3);
-				translation.at<float>(0, 2) = Hi2c2.at<float>(2, 3);
-				
-				rotation.at<float>(0, 0) = Hi2c2.at<float>(0, 0);
-				rotation.at<float>(0, 1) = Hi2c2.at<float>(0, 1);
-				rotation.at<float>(0, 2) = Hi2c2.at<float>(0, 2);
-				rotation.at<float>(1, 0) = Hi2c2.at<float>(1, 0);
-				rotation.at<float>(1, 1) = Hi2c2.at<float>(1, 1);
-				rotation.at<float>(1, 2) = Hi2c2.at<float>(1, 2);
-				rotation.at<float>(2, 0) = Hi2c2.at<float>(2, 0);
-				rotation.at<float>(2, 1) = Hi2c2.at<float>(2, 1);
-				rotation.at<float>(2, 2) = Hi2c2.at<float>(2, 2);
-				
-				//now Pc_i = Hi2c2 * Pw, so for Pw we need Pw = Hi2c2.inv() * Pc_i
+				rotationList.push_back(R_imu0TOrectcam2);
+				translationList.push_back(T_imu0TOrectcam2);
+
 			}
-			//translation = translation + Ti2v + Tv2c + T0t2;
-			//rotation = Rrect2 * R0t2 * Rv2c * Ri2v * rotation;
-			//rotation = rotation * (Ri2v);
+			//translation = translation + T_imu2velo + T_velo2cam0 + T_cam0grayTOcam2color;
+			//rotation = R_cam2TOrectcam2 * R_cam0grayTOcam2color * R_velo2cam0 * R_imu2velo * rotation;
+			//rotation = rotation * (R_imu2velo);
 			
-			rotationList.push_back(rotation);
-			translationList.push_back(translation);
 			
 			//std::cout<<translation<<endl;
 		}
@@ -535,7 +541,7 @@ int main( int /*argc*/, char** /*argv*/ )
 		//maybe I can use some simple frame skip to instead it
 		static int framecnt = -1;
 		framecnt++;
-		fileNum = 25;
+		fileNum = 8;
 		if (framecnt >= fileNum)
 			break;
 		//bool isKeyframe;
