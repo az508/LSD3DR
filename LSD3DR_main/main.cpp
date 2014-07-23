@@ -21,7 +21,7 @@
 #include <pcl/console/parse.h>
 #include <pcl/filters/radius_outlier_removal.h>
 #include <pcl/filters/voxel_grid.h>
-//#include "tracklets.h"
+
 
 
 float NCC(cv::Mat& currentFrame, cv::Mat& targetFrame, cv::Mat& curPixel, cv::Mat& tarPixel,int patchSize)
@@ -42,16 +42,16 @@ float NCC(cv::Mat& currentFrame, cv::Mat& targetFrame, cv::Mat& curPixel, cv::Ma
 	v = tarPixel.at<float>(0, 1);
 	cv::Mat tarPatch;
 	cv::Rect tarPosition(u - patchSize/2, v - patchSize /2, patchSize, patchSize);
-
+	targetFrame(tarPosition).copyTo(tarPatch);
 	
 	
 	cv::matchTemplate(curPatch, tarPatch, result, CV_TM_CCORR_NORMED);
-	return result.at<double>(patchSize/2, patchSize/2);
+	return result.at<float>(patchSize/2, patchSize/2);
 };
 
 
 	
-void loadCalibrationKITTI(std::string infile, float baseline, float focus, float u0, float v0 )
+void loadCalibrationKITTI(std::string infile, float& baseline, float& focus, float& u0, float& v0, cv::Mat& R0t2, cv::Mat& T0t2, cv::Mat& Rrect2 )
 {
 	// calib_cam_to_cam.txt: Camera-to-camera calibration
 	// --------------------------------------------------
@@ -75,16 +75,111 @@ void loadCalibrationKITTI(std::string infile, float baseline, float focus, float
 		exit(EXIT_FAILURE);
 	}
 	
-	// read matrix P, for the two colored camera
+	std::string line;
+	std::getline(input, line);//skip calib_time
+	std::getline(input, line);//skip calib_dist
+	//!<skip two grey scale camera
+	for (int i = 0; i < 2; i++)
+	{
+		std::getline(input, line);//skip S
+		std::getline(input, line);//skip K
+		std::getline(input, line);//skip D
+		
+		std::getline(input, line);//skip R
+		std::getline(input, line);//skip T
+		
+		std::getline(input, line);//skip Sr
+		std::getline(input, line);//skip Rr
+		std::getline(input, line);//skip Pr
+	}
+	//!<get calibration of two color camera
+
+	float fb2, fb3;
+	//left color
+	{
+		std::string matrixName;
+		float dummy;
+		
+		std::getline(input, line);//skip S
+		std::getline(input, line);//skip K
+		std::getline(input, line);//skip D
+		
+		//read R
+		input>>matrixName;
+		for (int i = 0; i < 3; i ++)
+		{
+			for (int j = 0; j < 3; j++)
+			{
+				input >> R0t2.at<float>(i, j);
+			}
+		}
+		//read T
+		input >> matrixName;
+		for (int i = 0; i < 3; i++)
+		{
+			input >> T0t2.at<float>(0, i);
+		}
+		std::getline(input, line);//to next line
+		std::getline(input, line);//skip Sr
+		
+		//read Rr
+		input>>matrixName;
+		for (int i = 0; i < 3; i ++)
+		{
+			for (int j = 0; j < 3; j++)
+			{
+				input >> Rrect2.at<float>(i, j);
+			}
+		}
+		
+		//read Pr
+		input>>matrixName;
+		input>>focus;
+		input>>dummy;
+		input>>u0;
+		input>>fb2;
+		input>>dummy;
+		input>>dummy;
+		input>>v0;
+		
+		std::getline(input, line);//skip Pr
+	}
 	
+	//right color
+	float focus3;
+	{
+		std::getline(input, line);//skip S
+		std::getline(input, line);//skip K
+		std::getline(input, line);//skip D
+		
+		std::getline(input, line);//skip R
+		std::getline(input, line);//skip T
+		
+		std::getline(input, line);//skip Sr
+		std::getline(input, line);//skip Rr
+		
+		//read Pr
+		std::string matrixName;
+		float dummy;
+		input>>matrixName;
+		input>>focus3;
+		input>>dummy;
+		input>>dummy;
+		input>>fb3;
+		input>>dummy;
+		input>>dummy;
+		input>>dummy;
+		
+		std::getline(input, line);//skip Pr
+	}
+	
+	baseline = fabs(fb3 / (-focus3) - fb2 / (-focus));
+
 	input.close();
 };
 
 
-void loadPositionKITTI(std::string infile, std::vector<cv::Mat>& rotationList, std::vector<cv::Mat>& translationList)
-{
 
-};
 
 
 int main( int /*argc*/, char** /*argv*/ )
@@ -94,7 +189,7 @@ int main( int /*argc*/, char** /*argv*/ )
     //Load calibration matrix, camera position, 
     //and image pairs. Init variables.
     //*******************************************
-    std::string infile;
+    std::string infile = "/home/zhao/Project/KITTI/2011_09_26/calib_cam_to_cam.txt" ;
     
     //!< load camera calibration info
 	//need to learn about the format of KITTI
@@ -102,15 +197,238 @@ int main( int /*argc*/, char** /*argv*/ )
 	float focus;
 	float u0;
 	float v0;
-	loadCalibrationKITTI(infile, baseline, focus, u0, v0 );
+	cv::Mat R0t2(3, 3, CV_32F);
+	cv::Mat Rrect2(3, 3, CV_32F);
+	cv::Mat T0t2(1, 3, CV_32F);
+	loadCalibrationKITTI(infile, baseline, focus, u0, v0, R0t2, T0t2, Rrect2 );
+	std::cout<<" calib_cam_to_cam.txt loaded. "<<endl;
+	//std::cout<<" R0t2: "<<endl<<R0t2<<endl;
+	//std::cout<<" Rrect2: "<<endl<<Rrect2<<endl;
   
-
     //!< load camera position info
-	cv::Mat rotation(3, 3, CV_32F);
-	cv::Mat translation(1, 3, CV_32F);
 	std::vector<cv::Mat> rotationList;
 	std::vector<cv::Mat> translationList;
-	loadPositionKITTI(infile, rotationList, translationList);
+	std::vector<cv::Mat> transformList;
+	
+	//!<get other calibration information
+	//first imu to velo
+	cv::Mat Ri2v(3, 3, CV_32F);
+	cv::Mat Ti2v(1, 3, CV_32F);
+	{
+		std::string infile = "/home/zhao/Project/KITTI/2011_09_26/calib_imu_to_velo.txt" ;
+		fstream input(infile.c_str(), ios::in);
+		if(!input.good()){
+			cerr << "Could not read file: " << infile << endl;
+			exit(EXIT_FAILURE);
+		}
+		
+		std::string line, matrixName;
+		std::getline(input, line);
+		
+		input >> matrixName;
+		for (int i = 0; i < 3; i ++)
+		{
+			for (int j = 0; j < 3; j++)
+			{
+				input >> Ri2v.at<float>(i, j);
+			}
+		}
+		
+		input >> matrixName;
+		for (int i = 0; i < 3; i++)
+		{
+			input >> Ti2v.at<float>(0, i);
+		}
+		
+		input.close();
+	}
+	std::cout<<" calib_imu_to_velo.txt loaded. "<<endl;
+	//std::cout<<" Ri2v: "<<endl<<Ri2v<<endl;
+	
+	//then velo to camera
+	cv::Mat Rv2c(3, 3, CV_32F);
+	cv::Mat Tv2c(1, 3, CV_32F);
+	{
+		std::string infile = "/home/zhao/Project/KITTI/2011_09_26/calib_velo_to_cam.txt" ;
+		fstream input(infile.c_str(), ios::in);
+		if(!input.good()){
+			cerr << "Could not read file: " << infile << endl;
+			exit(EXIT_FAILURE);
+		}
+		
+		std::string line, matrixName;
+		std::getline(input, line);
+		
+		input >> matrixName;
+		for (int i = 0; i < 3; i ++)
+		{
+			for (int j = 0; j < 3; j++)
+			{
+				input >> Rv2c.at<float>(i, j);
+			}
+		}
+		
+		input >> matrixName;
+		for (int i = 0; i < 3; i++)
+		{
+			input >> Tv2c.at<float>(0, i);
+		}
+		
+		input.close();
+	}
+	std::cout<<" calib_velo_to_cam.txt loaded. "<<endl;
+	//std::cout<<" Rv2c: "<<endl<<Rv2c<<endl;
+	
+	//!<get camera position by translate velodyne position
+	/*******************************************************************
+	lat:   latitude of the oxts-unit (deg)
+	lon:   longitude of the oxts-unit (deg)
+	alt:   altitude of the oxts-unit (m)
+	roll:  roll angle (rad),    0 = level, positive = left side up,      range: -pi   .. +pi
+	pitch: pitch angle (rad),   0 = level, positive = front down,        range: -pi/2 .. +pi/2
+	yaw:   heading (rad),       0 = east,  positive = counter clockwise, range: -pi   .. +pi
+	vn:    velocity towards north (m/s)
+	ve:    velocity towards east (m/s)
+	vf:    forward velocity, i.e. parallel to earth-surface (m/s)
+	vl:    leftward velocity, i.e. parallel to earth-surface (m/s)
+	vu:    upward velocity, i.e. perpendicular to earth-surface (m/s)
+	ax:    acceleration in x, i.e. in direction of vehicle front (m/s^2)
+	ay:    acceleration in y, i.e. in direction of vehicle left (m/s^2)
+	ay:    acceleration in z, i.e. in direction of vehicle top (m/s^2)
+	af:    forward acceleration (m/s^2)
+	al:    leftward acceleration (m/s^2)
+	au:    upward acceleration (m/s^2)
+	wx:    angular rate around x (rad/s)
+	wy:    angular rate around y (rad/s)
+	wz:    angular rate around z (rad/s)
+	wf:    angular rate around forward axis (rad/s)
+	wl:    angular rate around leftward axis (rad/s)
+	wu:    angular rate around upward axis (rad/s)
+	pos_accuracy:  velocity accuracy (north/east in m)
+	vel_accuracy:  velocity accuracy (north/east in m/s)
+	navstat:       navigation status (see navstat_to_string)
+	numsats:       number of satellites tracked by primary GPS receiver
+	posmode:       position mode of primary GPS receiver (see gps_mode_to_string)
+	velmode:       velocity mode of primary GPS receiver (see gps_mode_to_string)
+	orimode:       orientation mode of primary GPS receiver (see gps_mode_to_string)
+	********************************************************************/
+	float lat, lon, alt, roll, pitch, yaw, vn, ve, vf, vl, vu, ax, ay, az, af, al, au, wx, wy, wz, wf, wl, wu, pos_accuracy, vel_accuracy;
+	int navstat, numsats, posmode, velmode, orimode;
+	{
+		std::string dirname = "/home/zhao/Project/KITTI/2011_09_26/2011_09_26_drive_0002_sync/oxts/data/";
+		struct dirent **namelist;
+		int fileNum = scandir(dirname.c_str(), &namelist, NULL, alphasort);
+		if(fileNum == -1) {
+			err(EXIT_FAILURE, "%s", dirname.c_str());
+		}
+		//(void) printf ("%d\n", fileNum);
+		
+		for (int i = 2; i < fileNum; ++i) 
+		{
+			fstream input(dirname + namelist[i]->d_name, ios::in);
+			if(!input.good()){
+				cerr << "Could not read file: " << infile << endl;
+				exit(EXIT_FAILURE);
+			}
+			
+			input>>lat>>lon>>alt>>roll>>pitch>>yaw>>vn>>ve>>vf>>vl>>vu>>ax>>ay>>az>>af>>al>>au>>wx>>wy>>wz>>wf>>wl>>wu>>pos_accuracy>>vel_accuracy;
+			input>>navstat>>numsats>>posmode>>velmode>>orimode;
+			
+			input.close();
+			free(namelist[i]);
+			
+			//!<compute mercator scale from latitude
+			float scale = cos(lat * M_PI / 180.0);
+			
+			//!< converts lat/lon coordinates to mercator coordinates using mercator scale
+
+			const float er = 6378137;
+			float mx = scale * lon * M_PI * er / 180;
+			float my = scale * er * log( tan((90+lat) * M_PI / 360) );
+			
+			cv::Mat rotation(3, 3, CV_32F);
+			cv::Mat translation(1, 3, CV_32F);
+			
+			translation.at<float>(0, 0) = mx;
+			translation.at<float>(0, 1) = my;
+			translation.at<float>(0, 2) = alt;
+			//std::cout<<translation<<endl;
+			
+			
+			//!< rotation matrix (OXTS RT3000 user manual, page 71/92)
+			float rx = roll; // roll
+			float ry = yaw; // pitch
+			float rz = pitch; // heading 
+			
+			cv::Mat Rx = (cv::Mat_<float>(3,3) << 1, 0, 0, 0, cos(rx), -sin(rx), 0, sin(rx), cos(rx));// base => nav  (level oxts => rotated oxts)
+			cv::Mat Ry = (cv::Mat_<float>(3,3) << cos(ry), 0, sin(ry), 0, 1, 0, -sin(ry), 0, cos(ry));// base => nav  (level oxts => rotated oxts)
+			cv::Mat Rz = (cv::Mat_<float>(3,3) << cos(rz), -sin(rz), 0, sin(rz), cos(rz), 0, 0, 0, 1);// base => nav  (level oxts => rotated oxts)
+			rotation = Rz*Ry*Rx;
+			//std::cout<<rotation<<endl;
+			
+			//!< Now let's translate this IMUGPS position to left camera's
+			{
+				cv::Mat Hi2v = (cv::Mat_<float>(4,4) <<  Ri2v.at<float>(0, 0), Ri2v.at<float>(0, 1), Ri2v.at<float>(0, 2), Ti2v.at<float>(0, 0),
+														Ri2v.at<float>(1, 0), Ri2v.at<float>(1, 1), Ri2v.at<float>(1, 2), Ti2v.at<float>(0, 1),
+														Ri2v.at<float>(2, 0), Ri2v.at<float>(2, 1), Ri2v.at<float>(2, 2), Ti2v.at<float>(0, 2),
+														0, 0, 0, 1 );
+				
+				cv::Mat Hv2c = (cv::Mat_<float>(4,4) <<  Rv2c.at<float>(0, 0), Rv2c.at<float>(0, 1), Rv2c.at<float>(0, 2), Tv2c.at<float>(0, 0),
+														Rv2c.at<float>(1, 0), Rv2c.at<float>(1, 1), Rv2c.at<float>(1, 2), Tv2c.at<float>(0, 1),
+														Rv2c.at<float>(2, 0), Rv2c.at<float>(2, 1), Rv2c.at<float>(2, 2), Tv2c.at<float>(0, 2),
+														0, 0, 0, 1 );
+				
+				cv::Mat  H0t2 = (cv::Mat_<float>(4,4) <<  R0t2.at<float>(0, 0), R0t2.at<float>(0, 1), R0t2.at<float>(0, 2), T0t2.at<float>(0, 0),
+														R0t2.at<float>(1, 0), R0t2.at<float>(1, 1), R0t2.at<float>(1, 2), T0t2.at<float>(0, 1),
+														R0t2.at<float>(2, 0), R0t2.at<float>(2, 1), R0t2.at<float>(2, 2), T0t2.at<float>(0, 2),
+														0, 0, 0, 1 );
+				
+				cv::Mat  Hrect2 = (cv::Mat_<float>(4,4) <<  Rrect2.at<float>(0, 0), Rrect2.at<float>(0, 1), Rrect2.at<float>(0, 2), 0,
+														Rrect2.at<float>(1, 0), Rrect2.at<float>(1, 1), Rrect2.at<float>(1, 2), 0,
+														Rrect2.at<float>(2, 0), Rrect2.at<float>(2, 1), Rrect2.at<float>(2, 2), 0,
+														0, 0, 0, 1 );
+				
+				cv::Mat  Hw2i = (cv::Mat_<float>(4,4) <<  rotation.at<float>(0, 0), rotation.at<float>(0, 1), rotation.at<float>(0, 2), translation.at<float>(0, 0),
+														rotation.at<float>(1, 0), rotation.at<float>(1, 1), rotation.at<float>(1, 2), translation.at<float>(0, 1),
+														rotation.at<float>(2, 0), rotation.at<float>(2, 1), rotation.at<float>(2, 2), translation.at<float>(0, 2),
+														0, 0, 0, 1 );
+				
+				
+				//now this matrix will trans ith frame's point(scanner frame) into world's frame(first frame's coordinate)
+				
+				cv::Mat  Hi2c2(4, 4, CV_32F);
+				Hi2c2 = Hrect2 * H0t2 * Hv2c * Hi2v * Hw2i;
+				//transformList.push_back(Hi2c2);
+				
+				
+				translation.at<float>(0, 0) = Hi2c2.at<float>(0, 3);
+				translation.at<float>(0, 1) = Hi2c2.at<float>(1, 3);
+				translation.at<float>(0, 2) = Hi2c2.at<float>(2, 3);
+				
+				rotation.at<float>(0, 0) = Hi2c2.at<float>(0, 0);
+				rotation.at<float>(0, 1) = Hi2c2.at<float>(0, 1);
+				rotation.at<float>(0, 2) = Hi2c2.at<float>(0, 2);
+				rotation.at<float>(1, 0) = Hi2c2.at<float>(1, 0);
+				rotation.at<float>(1, 1) = Hi2c2.at<float>(1, 1);
+				rotation.at<float>(1, 2) = Hi2c2.at<float>(1, 2);
+				rotation.at<float>(2, 0) = Hi2c2.at<float>(2, 0);
+				rotation.at<float>(2, 1) = Hi2c2.at<float>(2, 1);
+				rotation.at<float>(2, 2) = Hi2c2.at<float>(2, 2);
+				
+				//now Pc_i = Hi2c2 * Pw, so for Pw we need Pw = Hi2c2.inv() * Pc_i
+			}
+			//translation = translation + Ti2v + Tv2c + T0t2;
+			//rotation = Rrect2 * R0t2 * Rv2c * Ri2v * rotation;
+			//rotation = rotation * (Ri2v);
+			
+			rotationList.push_back(rotation);
+			translationList.push_back(translation);
+			
+			//std::cout<<translation<<endl;
+		}
+		free(namelist);
+	}
+	std::cout<<" camera position obtained. "<<endl;
 	
 	
 	//!< load image pairs
@@ -119,12 +437,12 @@ int main( int /*argc*/, char** /*argv*/ )
 	std::vector<cv::Mat> RRefectedList;
 	std::vector<cv::Mat> LNormalizedList;
 	
-	
+	int fileNum;
 	//!<load images obtained by left color camera
 	{
 		std::string dirname = "/home/zhao/Project/KITTI/2011_09_26/2011_09_26_drive_0002_sync/image_02/data/";
 		struct dirent **namelist;
-		int fileNum = scandir(dirname.c_str(), &namelist, NULL, alphasort);
+		fileNum = scandir(dirname.c_str(), &namelist, NULL, alphasort);
 		if(fileNum == -1) {
 			err(EXIT_FAILURE, "%s", dirname.c_str());
 		}
@@ -141,13 +459,14 @@ int main( int /*argc*/, char** /*argv*/ )
 		}
 		free(namelist);
 	}
+	std::cout<<" left color images loaded. "<<endl;
 	
 	
 	//!<load images obtained by right color camera
 	{
 		std::string dirname = "/home/zhao/Project/KITTI/2011_09_26/2011_09_26_drive_0002_sync/image_03/data/";
 		struct dirent **namelist;
-		int fileNum = scandir(dirname.c_str(), &namelist, NULL, alphasort);
+		fileNum = scandir(dirname.c_str(), &namelist, NULL, alphasort);
 		if(fileNum == -1) {
 			err(EXIT_FAILURE, "%s", dirname.c_str());
 		}
@@ -164,17 +483,17 @@ int main( int /*argc*/, char** /*argv*/ )
 		}
 		free(namelist);
 	}
+	std::cout<<" right color images loaded. "<<endl;
 	
-	return 0;
-    
-
+	fileNum = fileNum -2;//!< fix the file num
+	
 	//!< init variables
 	
 	Elas::parameters param;
 	param.postprocess_only_left = true;
 	param.disp_min = 0;
-	param.disp_max = (9 + 1) * 16;
-	const int32_t dims[3] = {640, 480, 640};
+	param.disp_max = (39 + 1) * 16;
+	const int32_t dims[3] = {1242, 375, 1242};
 	Elas elas( param );
 	
 	//init paramaters
@@ -190,23 +509,35 @@ int main( int /*argc*/, char** /*argv*/ )
 	pcl::PointCloud<pcl::PointXYZRGB> currentFrameCloud;
 	
 
-	cv::Mat K(3, 3, CV_32F);
+	cv::Mat K = cv::Mat::zeros(3, 3, CV_32F);
 	K.at<float>(0,0) = focus;
 	K.at<float>(1,1) = focus;
 	K.at<float>(2,2) = 1.0;
 	K.at<float>(0,2) = u0;
 	K.at<float>(1,2) = v0;
-	
+	std::cout<<" K is "<<endl<<K<<endl;
 	
 	const int m = 3; 
-	const int r = (m - 1) / 2;
+	const int r = (m - 1) / 2 + 1;
+	
+	
+    //boost::shared_ptr< pcl::visualization::PCLVisualizer > viewer (new pcl::visualization::PCLVisualizer ("3D Viewer"));
+    //viewer->setBackgroundColor (0, 0, 0);
+    //viewer->addPointCloud<pcl::PointXYZRGB> (globalCloud.makeShared(), "my points");
+    //viewer->addCoordinateSystem (1.0, "global");
+    //viewer->initCameraParameters ();
+	
+	std::cout<<" start main loop. "<<endl;
 	
     while ( true )
     {
 		//keyframe selected by minimum distance of camera motion
 		//maybe I can use some simple frame skip to instead it
-		static int framecnt = 0;
+		static int framecnt = -1;
 		framecnt++;
+		fileNum = 25;
+		if (framecnt >= fileNum)
+			break;
 		//bool isKeyframe;
 		//if ( !isKeyframe )
 		//	continue;
@@ -214,10 +545,16 @@ int main( int /*argc*/, char** /*argv*/ )
 		//*******************************************
 		//Dense stereo matching by ELAS
 		//*******************************************
-		cv::Mat imageDisparity;
+		cv::Mat imageDisparity(375, 1242, CV_32F);
 		cv::Mat& leftRefected = LRefectedList.at(framecnt);
 		cv::Mat& rightRefected = RRefectedList.at(framecnt);
-		elas.process(leftRefected.data, rightRefected.data, (float*)imageDisparity.data,(float*)imageDisparity.data, dims);
+		cv::Mat grayLeftRefected;
+		cv::Mat grayRightRefected;
+		cv::cvtColor(leftRefected,grayLeftRefected,CV_BGR2GRAY);
+		cv::cvtColor(rightRefected,grayRightRefected,CV_BGR2GRAY);
+		//grayLeftRefected.convertTo(grayLeftRefected,CV_8UC1);
+		//grayRightRefected.convertTo(grayRightRefected,CV_8UC1);
+		elas.process(grayLeftRefected.data, grayRightRefected.data, (float*)imageDisparity.data,(float*)imageDisparity.data, dims);
 		
 		
 		//!<This vector is work like that:
@@ -244,11 +581,22 @@ int main( int /*argc*/, char** /*argv*/ )
 		
 		LNormalizedList.push_back(grayNormalized);
 		
-		if (framecnt % m != 0)
+		if ((framecnt + 1) % m != 0)
 			continue;
 		
+		currentFrameCloud.clear();
 
+		std::cout<<" start keyframe at "<<framecnt - m + r <<"."<<endl;
+		//cv::imshow( "D1",  disparityList[framecnt - m + 1] );
+		//cv::imshow( "D2",  disparityList[framecnt - m + 2] );
+		//cv::imshow( "D3",  disparityList[framecnt - m + 3] );
+		//cv::imshow( "L1",  LNormalizedList.at(framecnt -m + 1) );
+		//cv::imshow( "L2",  grayLeftRefected );
+		//cv::imshow( "L3",  LNormalizedList.at(framecnt -m + 3) );
+		//cv::waitKey(10);
 		
+		std::cout<<rotationList[framecnt - m + r]<<endl;
+		std::cout<<translationList[framecnt - m + r]<<endl;
 		
 		
 		for ( int i = 0; i < leftRefected.rows; i++ )
@@ -261,31 +609,63 @@ int main( int /*argc*/, char** /*argv*/ )
 				
 				//float p = LRefectedList[framecnt - m + r].at<float>(i, j);
 				float d = disparityList[framecnt - m + r].at<float>(i, j);
+				if (d < 0)
+					continue;
 				
 				//!<compute 3D point
 				float z = focus * (baseline / d);
 				float x = z * (j - u0) / focus;
 				float y = z * (i - v0) / focus;
-				cv::Mat Yi(1, 3, CV_32F, 0);
+				cv::Mat Yi(1, 3, CV_32F);
 				Yi.at<float>(0,0) = x;
 				Yi.at<float>(0,1) = y;
 				Yi.at<float>(0,2) = z;
 				
+				
+				//Yi = ( K * Yi.t() ).t();
+				//std::cout<<Yi<<endl;
+				//Yi = Yi / Yi.at<float>(0,2);
+				//std::cout<<Yi<<endl;
+				
+				//Now we get the XYZ, but under the camera coordinate system
+				//!<convert the XYZ to world system
+				//Yc = trans * Yw
+				//std::cout<<Yi<<endl;
+				
+				//cv::Mat Yit(1, 4, CV_32F);
+				//Yit.at<float>(0,0) = x;
+				//Yit.at<float>(0,1) = y;
+				//Yit.at<float>(0,2) = z;
+				//Yit.at<float>(0,3) = 1;
+				//cv::Mat test = ( transformList[framecnt - m + r] * Yit.t() ).t();
+				//float xt = test.at<float>(0,0);
+				//float yt = test.at<float>(0,1);
+				//float zt = test.at<float>(0,2);
+				
+				
+				Yi = ( rotationList[framecnt - m + r].inv() * Yi.t() + translationList[framecnt - m + r].t() ).t();
+				//Yi = (rotationList[framecnt - m + r].inv() * (Yi - translationList[framecnt - m + r]).t()).t();
+				x = Yi.at<float>(0,0);
+				y = Yi.at<float>(0,1);
+				z = Yi.at<float>(0,2);
+				//std::cout<<Yi<<endl;
+				
+				
 				//!<compute covariance Pi
 				//Pi = Ji * Si * Ji'
-				cv::Mat Si(3, 3, CV_32F, 0);
+				cv::Mat Si = cv::Mat::zeros(3, 3, CV_32F);
 				Si.at<float>(0,0) = pointingError * pointingError;
 				Si.at<float>(1,1) = pointingError * pointingError;
 				Si.at<float>(2,2) = matchingError * matchingError;
 				
-				cv::Mat Ji(3, 3, CV_32F, 0);
-				Si.at<float>(0,0) = baseline / d;
-				Si.at<float>(0,2) = - (j * baseline / (d*d) );
-				Si.at<float>(1,1) = baseline / d;
-				Si.at<float>(1,2) = - (i * baseline / (d*d) );
-				Si.at<float>(2,2) = - (focus * baseline / (d*d) );
+				cv::Mat Ji = cv::Mat::zeros(3, 3, CV_32F);
+				Ji.at<float>(0,0) = baseline / d;
+				Ji.at<float>(0,2) = - (j * baseline / (d*d) );
+				Ji.at<float>(1,1) = baseline / d;
+				Ji.at<float>(1,2) = - (i * baseline / (d*d) );
+				Ji.at<float>(2,2) = - (focus * baseline / (d*d) );
 				
-				cv::Mat Pi(3, 3, CV_32F, 0);
+				cv::Mat Pi = cv::Mat::zeros(3, 3, CV_32F);
 				Pi = Ji * Si * Ji.t();
 				float w = Pi.at<float>(0,0) + Pi.at<float>(1,1) + Pi.at<float>(2,2);
 				
@@ -298,18 +678,35 @@ int main( int /*argc*/, char** /*argv*/ )
 				std::vector<float> weightList;
 				std::vector<cv::Mat> YiList;
 				bool flgReproject = true;
-				for (int k = 0; k < m; k++)
+				for (int k = 1; k <= m; k++)
 				{
-					cv::Mat& rotation = rotationList.at(framecnt - m + k);
-					cv::Mat& translation = translationList.at(framecnt - m + k);
-					cv::Mat& disparity = disparityList.at(framecnt - m + k);
-					cv::Mat Ui(1, 3, CV_32F, 0);
-					Ui = K * (rotation * (Yi - translation) );
+					cv::Mat& rotation = rotationList.at(framecnt - m + r);/////////////////////////////////////////////////////////
+					cv::Mat& translation = translationList.at(framecnt - m + r);/////////////////////////////////////////////////////////
+					cv::Mat& disparity = disparityList.at(framecnt - m + r);/////////////////////////////////////////////////////////
+					cv::Mat Ui = cv::Mat::zeros(1, 3, CV_32F);
+					
+					//Yi = (rotation * (Yi - translation).t()).t();
+					//std::cout<<Yi<<endl;
+					//Ui = (K * Yi.t()).t();
+					//std::cout<<Ui<<endl;
+					Ui = K * (rotation * (Yi - translation).t() );
+					//Ui = K * (rotation * Yi.t() + translation.t() );
+					Ui = Ui / Ui.at<float>(0,2);
 					
 					//Now we got the pixel's position, let's check the disparity
 					float u = Ui.at<float>(0,0);
 					float v = Ui.at<float>(0,1);
-					float d = disparity.at<float>(u, v);
+					
+					
+					//check if pixel out side the image
+					if (u<0 || u>1242 || v <0 || v> 375 ||isnan(u) ||isnan(v))
+					{
+						flgReproject = false;
+						break;
+					}
+					
+					//get disparity
+					float d = disparity.at<float>(v, u);
 					
 					//check if disparity is valid
 					if ( !(d > 0 && d < param.disp_max))
@@ -322,18 +719,18 @@ int main( int /*argc*/, char** /*argv*/ )
 					//!<Use the same method with wi's check
 					//!<since the Si is already set, we need only to refill the Ji
 					
-					Si.at<float>(0,0) = baseline / d;
-					Si.at<float>(0,2) = - (j * baseline / (d*d) );
-					Si.at<float>(1,1) = baseline / d;
-					Si.at<float>(1,2) = - (i * baseline / (d*d) );
-					Si.at<float>(2,2) = - (focus * baseline / (d*d) );
+					Ji.at<float>(0,0) = baseline / d;
+					Ji.at<float>(0,2) = - (j * baseline / (d*d) );
+					Ji.at<float>(1,1) = baseline / d;
+					Ji.at<float>(1,2) = - (i * baseline / (d*d) );
+					Ji.at<float>(2,2) = - (focus * baseline / (d*d) );
 					
 					Pi = Ji * Si * Ji.t();
 					float w = Pi.at<float>(0,0) + Pi.at<float>(1,1) + Pi.at<float>(2,2);
 					
 					if (w > Tcov)
 					{
-						flgReproject = true;
+						flgReproject = false;
 						break;
 					}
 					weightList.push_back(w);
@@ -344,10 +741,12 @@ int main( int /*argc*/, char** /*argv*/ )
 					float z = focus * (baseline / d);
 					float x = z * (j - u0) / focus;
 					float y = z * (i - v0) / focus;
-					cv::Mat Yi(1, 3, CV_32F, 0);
+					cv::Mat Yi(1, 3, CV_32F);
 					Yi.at<float>(0,0) = x;
 					Yi.at<float>(0,1) = y;
 					Yi.at<float>(0,2) = z;
+					Yi = ( rotationList[framecnt - m + r].inv() * Yi.t() + translationList[framecnt - m + r].t() ).t();/////////////////////////////////////////////////////////
+					//Yi = (rotationList[framecnt - m + k].inv() * (Yi - translationList[framecnt - m + k]).t()).t();
 					YiList.push_back(Yi);
 				}
 				
@@ -357,20 +756,21 @@ int main( int /*argc*/, char** /*argv*/ )
 				
 				
 				//!<check 3D difference between all reconstructed 3D points is within Tdist
-				float mindist = 99999;
-				for(int j = 0; j < globalCloud.size(); j++)
+				/*if (framecnt > 10 )
 				{
-					float x1 = globalCloud.at(j).x;
-					float y1 = globalCloud.at(j).y;
-					float z1 = globalCloud.at(j).z;
-					float dis = (x-x1) * (x-x1) + (y-y1) * (y-y1) + (z-z1) * (z-z1);
-					if (dis < mindist)
-						mindist = dis;
-				}
-				if (mindist > Tdist)
-					continue;
-				
-				
+					float mindist = 99999;
+					for(int j = 0; j < globalCloud.size(); j++)
+					{
+						float x1 = globalCloud.at(j).x;
+						float y1 = globalCloud.at(j).y;
+						float z1 = globalCloud.at(j).z;
+						float dis = (x-x1) * (x-x1) + (y-y1) * (y-y1) + (z-z1) * (z-z1);
+						if (dis < mindist)
+							mindist = dis;
+					}
+					if (mindist > Tdist)
+						continue;
+				}*/
 				
 				//*******************************************
 				//Photometric check
@@ -379,38 +779,57 @@ int main( int /*argc*/, char** /*argv*/ )
 				std::vector<float> NCCSList;
 				std::vector<cv::Vec3b> colorList;
 				float gp = 0;
-				for (int k = 0; k < m; k++)
+				bool flgPhotometric = true;
+				for (int k = 1; k <= m; k++)
 				{
 					cv::Mat curPixel;
 					cv::Mat tarPixel;
 				
 				
 					//calculate 2D position in target frame
-					cv::Mat& rotation = rotationList.at(framecnt - m + k);
-					cv::Mat& translation = translationList.at(framecnt - m + k);
-					cv::Mat& disparity = disparityList.at(framecnt - m + k);
-					cv::Mat Ui(1, 3, CV_32F, 0);
-					Ui = K * (rotation * (Yi - translation) );
+					cv::Mat& rotation = rotationList.at(framecnt - m + r);/////////////////////////////////////////////////////////
+					cv::Mat& translation = translationList.at(framecnt - m + r);/////////////////////////////////////////////////////////
+					
+					cv::Mat Ui(1, 3, CV_32F);
+					Ui = K * (rotation * (Yi - translation).t() );
+					//Ui = K * (rotation * Yi.t() + translation.t() );
+					Ui = Ui / Ui.at<float>(0,2);
 					tarPixel = Ui;
 					
 					//save pixel value in target frame
 					float u = tarPixel.at<float>(0, 0);
 					float v = tarPixel.at<float>(0, 1);
-					cv::Vec3b bgr = LRefectedList[framecnt - m + k].at<cv::Vec3b>(u,v);
+					cv::Vec3b bgr = LRefectedList[framecnt - m + r].at<cv::Vec3b>(v,u);/////////////////////////////////////////////////////////
 					colorList.push_back(bgr);
+					if (u - patchSize/2 <0 || u + patchSize/2>1242 || v - patchSize/2 <0 || v + patchSize/2> 375 ||isnan(u) ||isnan(v))
+					{
+						flgPhotometric = false;
+						break;
+					}
 					
 					
 					//calculate 2D position in current frame
-					rotation = rotationList.at(framecnt - m + r);
-					translation = translationList.at(framecnt - m + r);
-					disparity = disparityList.at(framecnt - m + r);
-					Ui = K * (rotation * (Yi - translation) );
+					cv::Mat& _rotation = rotationList.at(framecnt - m + r);
+					cv::Mat& _translation = translationList.at(framecnt - m + r);
+					
+					Ui = K * (_rotation * (Yi - _translation).t() );
+					//Ui = K * (_rotation * Yi.t() + _translation.t() );
+					Ui = Ui / Ui.at<float>(0,2);
 					curPixel = Ui;
+					u = curPixel.at<float>(0, 0);
+					v = curPixel.at<float>(0, 1);
+					if (u - patchSize/2 <0 || u + patchSize/2>1242 || v - patchSize/2 <0 || v + patchSize/2> 375 ||isnan(u) ||isnan(v))
+					{
+						flgPhotometric = false;
+						break;
+					}
 				
-					float NCCScore = NCC(LNormalizedList.at(framecnt -m + r), LNormalizedList.at(framecnt - m + k), curPixel, tarPixel, patchSize);
+					float NCCScore = NCC(LNormalizedList.at(framecnt -m + r), LNormalizedList.at(framecnt - m + r), curPixel, tarPixel, patchSize);/////////////////////////////////////////////////////////
 					gp = gp + NCCScore;
 					
 				}
+				if(flgPhotometric == false)
+					continue;
 				gp = gp / 3;
 				if (gp > Tphoto)
 					continue;
@@ -452,30 +871,37 @@ int main( int /*argc*/, char** /*argv*/ )
 			}
 		}
 		
+		std::cout<<"Geometric & Photometric check finished."<<endl;
+		std::cout<<currentFrameCloud.size()<<" points got."<<endl;
 		
 		//*******************************************
 		//Remove outliers
 		//*******************************************
-		for (int i = 0; i < currentFrameCloud.size(); i++)
+		if (currentFrameCloud.size() != 0)
 		{
-			//something can be done by PCL, lucky
-			
-			
-			//!<Use radius removal filter
-			pcl::RadiusOutlierRemoval<pcl::PointXYZRGB> outrem;
-			// build the filter
-			outrem.setInputCloud(currentFrameCloud.makeShared());
-			outrem.setRadiusSearch(0.8);
-			outrem.setMinNeighborsInRadius (2);
-			// apply filter
-			outrem.filter (currentFrameCloud);
-			
-			//!<Use voxel grid to down sample
-			pcl::VoxelGrid<pcl::PointXYZRGB> sor;
-			sor.setInputCloud (globalCloud.makeShared());
-			sor.setLeafSize (0.01f, 0.01f, 0.01f);
-			sor.filter (globalCloud);
+			//for (int i = 0; i < currentFrameCloud.size(); i++)
+			{
+				//something can be done by PCL, lucky
+				
+				
+				//!<Use radius removal filter
+				pcl::RadiusOutlierRemoval<pcl::PointXYZRGB> outrem;
+				// build the filter
+				outrem.setInputCloud(currentFrameCloud.makeShared());
+				outrem.setRadiusSearch(0.1);
+				outrem.setMinNeighborsInRadius (2);
+				// apply filter
+				outrem.filter (currentFrameCloud);
+				
+				//!<Use voxel grid to down sample
+				pcl::VoxelGrid<pcl::PointXYZRGB> sor;
+				sor.setInputCloud (currentFrameCloud.makeShared());
+				sor.setLeafSize (0.05f, 0.05f, 0.05f);
+				sor.filter (currentFrameCloud);
+			}
 		}
+		std::cout<<"outliers removed."<<endl;
+		std::cout<<currentFrameCloud.size()<<" points remain."<<endl;
 		
 		//try save all those information to memory first
 		//disparityList.clear();
@@ -483,6 +909,16 @@ int main( int /*argc*/, char** /*argv*/ )
 		{
 			globalCloud.push_back(currentFrameCloud.at(i));
 		}
+		
+		
+		//viewer->updatePointCloud< pcl::PointXYZRGB > ( globalCloud.makeShared(), "my points" );
+		
+		char filename[512];
+		sprintf( filename, "frame-%d.pcd", framecnt );
+		pcl::io::savePCDFileASCII (filename, currentFrameCloud);
+		//std::cout<<"PCD outputed."<<endl;
+		
+		std::cout<<globalCloud.size()<<" points total."<<endl;
 	}
 	
 	
@@ -494,10 +930,13 @@ int main( int /*argc*/, char** /*argv*/ )
 	// Create the filtering object
 	pcl::VoxelGrid<pcl::PointXYZRGB> vox;
 	vox.setInputCloud (globalCloud.makeShared());
-	vox.setLeafSize (0.01f, 0.01f, 0.01f);
-	vox.filter (globalCloud);
+	vox.setLeafSize (0.05f, 0.05f, 0.05f);
+	//vox.filter (globalCloud);
+	
+	std::cout<<"down sample finish."<<endl;
 	
 	pcl::io::savePCDFileASCII ("scene.pcd", globalCloud);
+	std::cout<<"PCD outputed."<<endl;
 	
     return 0;
 }
