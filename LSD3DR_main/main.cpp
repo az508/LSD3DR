@@ -52,9 +52,9 @@ void homogeneous2RT( cv::Mat& H, cv::Mat& R, cv::Mat& T)
 void RT2homogeneous( cv::Mat& H, cv::Mat& R, cv::Mat& T)
 {
 	
-	H.at<float>(0, 0) = R.at<float>(0, 0);	H.at<float>(0, 1) = R.at<float>(0, 0);	H.at<float>(0, 2) = R.at<float>(0, 0);	H.at<float>(0, 3) = R.at<float>(0, 0);
-	H.at<float>(1, 0) = R.at<float>(0, 0);	H.at<float>(1, 1) = R.at<float>(0, 0);	H.at<float>(1, 2) = R.at<float>(0, 0);	H.at<float>(1, 3) = R.at<float>(0, 0);
-	H.at<float>(2, 0) = R.at<float>(0, 0);	H.at<float>(2, 1) = R.at<float>(0, 0);	H.at<float>(2, 2) = R.at<float>(0, 0);	H.at<float>(2, 3) = R.at<float>(0, 0);
+	H.at<float>(0, 0) = R.at<float>(0, 0);	H.at<float>(0, 1) = R.at<float>(0, 1);	H.at<float>(0, 2) = R.at<float>(0, 2);	H.at<float>(0, 3) = T.at<float>(0, 0);
+	H.at<float>(1, 0) = R.at<float>(1, 0);	H.at<float>(1, 1) = R.at<float>(1, 1);	H.at<float>(1, 2) = R.at<float>(1, 2);	H.at<float>(1, 3) = T.at<float>(0, 1);
+	H.at<float>(2, 0) = R.at<float>(2, 0);	H.at<float>(2, 1) = R.at<float>(2, 1);	H.at<float>(2, 2) = R.at<float>(2, 2);	H.at<float>(2, 3) = T.at<float>(0, 2);
 	H.at<float>(3, 0) = 0				;	H.at<float>(3, 1) = 0				;	H.at<float>(3, 2) = 0				;	H.at<float>(3, 3) = 1				;
 
 };
@@ -86,7 +86,7 @@ float NCC(cv::Mat& currentFrame, cv::Mat& targetFrame, cv::Mat& curPixel, cv::Ma
 
 
 	
-void loadCalibrationKITTI(std::string infile, float& baseline, float& focus, float& u0, float& v0, cv::Mat& R_cam0grayTOcam2color, cv::Mat& T_cam0grayTOcam2color, cv::Mat& R_cam2TOrectcam2 )
+void loadCalibrationKITTI(std::string infile, float& baseline, float& focus, float& u0, float& v0, cv::Mat& R_cam0grayTOcam2color, cv::Mat& T_cam0grayTOcam2color, cv::Mat& R_cam2TOrectcam2, cv::Mat& R_cam0TOrectcam0 )
 {
 	// calib_cam_to_cam.txt: Camera-to-camera calibration
 	// --------------------------------------------------
@@ -114,7 +114,28 @@ void loadCalibrationKITTI(std::string infile, float& baseline, float& focus, flo
 	std::getline(input, line);//skip calib_time
 	std::getline(input, line);//skip calib_dist
 	//!<skip two grey scale camera
-	for (int i = 0; i < 2; i++)
+	{
+		std::getline(input, line);//skip S
+		std::getline(input, line);//skip K
+		std::getline(input, line);//skip D
+		
+		std::getline(input, line);//skip R
+		std::getline(input, line);//skip T
+		
+		std::getline(input, line);//skip Sr
+		//read Rr
+		std::string matrixName;
+		input>>matrixName;
+		for (int i = 0; i < 3; i ++)
+		{
+			for (int j = 0; j < 3; j++)
+			{
+				input >> R_cam0TOrectcam0.at<float>(i, j);
+			}
+		}
+		std::getline(input, line);
+		std::getline(input, line);//skip Pr
+	}
 	{
 		std::getline(input, line);//skip S
 		std::getline(input, line);//skip K
@@ -234,8 +255,9 @@ int main( int /*argc*/, char** /*argv*/ )
 	float v0;
 	cv::Mat R_cam0grayTOcam2color(3, 3, CV_32F);
 	cv::Mat R_cam2TOrectcam2(3, 3, CV_32F);
+	cv::Mat R_cam0TOrectcam0(3, 3, CV_32F);
 	cv::Mat T_cam0grayTOcam2color(1, 3, CV_32F);
-	loadCalibrationKITTI(infile, baseline, focus, u0, v0, R_cam0grayTOcam2color, T_cam0grayTOcam2color, R_cam2TOrectcam2 );
+	loadCalibrationKITTI(infile, baseline, focus, u0, v0, R_cam0grayTOcam2color, T_cam0grayTOcam2color, R_cam2TOrectcam2, R_cam0TOrectcam0 );
 	std::cout<<" calib_cam_to_cam.txt loaded. "<<endl;
 	//std::cout<<" R_cam0grayTOcam2color: "<<endl<<R_cam0grayTOcam2color<<endl;
 	//std::cout<<" R_cam2TOrectcam2: "<<endl<<R_cam2TOrectcam2<<endl;
@@ -314,6 +336,10 @@ int main( int /*argc*/, char** /*argv*/ )
 	std::cout<<" calib_velo_to_cam.txt loaded. "<<endl;
 	//std::cout<<" R_velo2cam0: "<<endl<<R_velo2cam0<<endl;
 	
+	
+
+				
+				
 	//!<get camera position by translate velodyne position
 	/*******************************************************************
 	lat:   latitude of the oxts-unit (deg)
@@ -347,7 +373,7 @@ int main( int /*argc*/, char** /*argv*/ )
 	velmode:       velocity mode of primary GPS receiver (see gps_mode_to_string)
 	orimode:       orientation mode of primary GPS receiver (see gps_mode_to_string)
 	********************************************************************/
-	float lat, lon, alt, roll, pitch, yaw, vn, ve, vf, vl, vu, ax, ay, az, af, al, au, wx, wy, wz, wf, wl, wu, pos_accuracy, vel_accuracy;
+	double lat, lon, alt, roll, pitch, yaw, vn, ve, vf, vl, vu, ax, ay, az, af, al, au, wx, wy, wz, wf, wl, wu, pos_accuracy, vel_accuracy;
 	int navstat, numsats, posmode, velmode, orimode;
 	{
 		std::string dirname = "/home/zhao/Project/KITTI/2011_09_26/2011_09_26_drive_0002_sync/oxts/data/";
@@ -358,6 +384,9 @@ int main( int /*argc*/, char** /*argv*/ )
 		}
 		//(void) printf ("%d\n", fileNum);
 		
+		
+		
+		cv::Mat H_imu0(4, 4, CV_32F);
 		for (int i = 2; i < fileNum; ++i) 
 		{
 			fstream input(dirname + namelist[i]->d_name, ios::in);
@@ -373,13 +402,13 @@ int main( int /*argc*/, char** /*argv*/ )
 			free(namelist[i]);
 			
 			//!<compute mercator scale from latitude
-			float scale = cos(lat * M_PI / 180.0);
+			double scale = cos(lat * M_PI / 180.0);
 			
 			//!< converts lat/lon coordinates to mercator coordinates using mercator scale
 
 			const float er = 6378137; //!< Earth radius [m]
-			float mx = scale * er * (lon * M_PI / 180);
-			float my = scale * er * log( tan( (90+lat) * M_PI / 360) );
+			double mx = scale * er * (lon * M_PI / 180);
+			double my = scale * er * log( tan( (90+lat) * M_PI / 360) );
 			//!< (mx,my): is the location of IMU/GPS in the mercator map. The world coordinate system is based on the mercator map.
 			
 			//!< R,T between IMU/GPS coordinate system from i-th frame to the 1st frame
@@ -393,9 +422,9 @@ int main( int /*argc*/, char** /*argv*/ )
 			
 			
 			//!< rotation matrix (OXTS RT3000 user manual, page 71/92)
-			float rx = roll; // roll
-			float ry = yaw; // pitch
-			float rz = pitch; // heading 
+			double rx = roll; // roll
+			double ry = yaw; // pitch
+			double rz = pitch; // heading 
 			
 			cv::Mat Rx = (cv::Mat_<float>(3,3) << 1, 0, 0, 0, cos(rx), -sin(rx), 0, sin(rx), cos(rx));// base => nav  (level oxts => rotated oxts)
 			cv::Mat Ry = (cv::Mat_<float>(3,3) << cos(ry), 0, sin(ry), 0, 1, 0, -sin(ry), 0, cos(ry));// base => nav  (level oxts => rotated oxts)
@@ -403,6 +432,8 @@ int main( int /*argc*/, char** /*argv*/ )
 			R_imu2imu0 = Rz*Ry*Rx;
 			//std::cout<<rotation<<endl;
 			
+			cv::Mat T_imu0TOrectcam2(1, 3, CV_32F);
+			cv::Mat R_imu0TOrectcam2(3, 3, CV_32F);
 			//!< Now let's translate this IMUGPS position to left camera's
 			{
 				cv::Mat H_imu2velo(4, 4, CV_32F);
@@ -412,26 +443,35 @@ int main( int /*argc*/, char** /*argv*/ )
 				RT2homogeneous(H_velo2cam0, R_velo2cam0, T_velo2cam0);
 				
 				cv::Mat H_cam0grayTOcam2color(4, 4, CV_32F);
-				RT2homogeneous(H_velo2cam0, R_velo2cam0, T_velo2cam0);
+				RT2homogeneous(H_cam0grayTOcam2color, R_cam0grayTOcam2color, T_cam0grayTOcam2color);
 				
 				cv::Mat H_cam2TOrectcam2(4, 4, CV_32F);
-				cv::Mat T_cam2TOrectcam2(1, 3, CV_32F, (0,0,0));
+				cv::Mat T_cam2TOrectcam2 = (cv::Mat_<float>(1,3) << 0, 0, 0);
 				RT2homogeneous(H_cam2TOrectcam2, R_cam2TOrectcam2, T_cam2TOrectcam2);
+				
+				cv::Mat H_cam0TOrectcam0(4, 4, CV_32F);
+				cv::Mat T_cam0TOrectcam0 = (cv::Mat_<float>(1,3) << 0, 0, 0);
+				RT2homogeneous(H_cam0TOrectcam0, R_cam0TOrectcam0, T_cam0TOrectcam0);
 				
 				cv::Mat H_imu2imu0(4, 4, CV_32F);
 				RT2homogeneous(H_imu2imu0, R_imu2imu0, T_imu2imu0);
+				if (i == 2)
+				{
+					H_imu2imu0.copyTo(H_imu0);
+				}
 				
 				
 				//<! now this matrix will trans ith frame's point(scanner frame) into world's frame(first frame's coordinate)
 				
 				cv::Mat  H_imu0TOrectcam2(4, 4, CV_32F);
-				H_imu0TOrectcam2 = H_cam2TOrectcam2 * H_cam0grayTOcam2color * H_velo2cam0 * H_imu2velo * H_imu2imu0;
+				//H_imu0TOrectcam2 = H_cam2TOrectcam2 * H_cam0grayTOcam2color * H_velo2cam0 * H_imu2velo * H_imu2imu0;
+				
+				//(H_imu0.inv() * H_imu2imu0) for normalize frame0's position to origin 
+				//if we do this, accurcy will descrace
+				H_imu0TOrectcam2 = H_cam2TOrectcam2 * H_cam0grayTOcam2color * H_velo2cam0 * H_imu2velo * (H_imu0.inv() * H_imu2imu0).inv();
 				//transformList.push_back(H_imu0TOrectcam2);
 				
-				cv::Mat T_imu0TOrectcam2(1, 3, CV_32F);
-				cv::Mat R_imu0TOrectcam2(3, 3, CV_32F);
-				
-				
+				//std::cout<<H_cam2TOrectcam2 * H_cam0grayTOcam2color * H_velo2cam0 * H_imu2velo<<endl;
 				
 				homogeneous2RT(H_imu0TOrectcam2, R_imu0TOrectcam2, T_imu0TOrectcam2);
 				
@@ -442,12 +482,14 @@ int main( int /*argc*/, char** /*argv*/ )
 				translationList.push_back(T_imu0TOrectcam2);
 
 			}
-			//translation = translation + T_imu2velo + T_velo2cam0 + T_cam0grayTOcam2color;
-			//rotation = R_cam2TOrectcam2 * R_cam0grayTOcam2color * R_velo2cam0 * R_imu2velo * rotation;
+			//T_imu0TOrectcam2 = T_imu2imu0 + T_imu2velo + T_velo2cam0 + T_cam0grayTOcam2color;
+			//R_imu0TOrectcam2 = R_cam2TOrectcam2 * R_cam0grayTOcam2color * R_velo2cam0 * R_imu2velo * R_imu2imu0;
+			//rotationList.push_back(R_imu0TOrectcam2);
+			//translationList.push_back(T_imu0TOrectcam2);
 			//rotation = rotation * (R_imu2velo);
 			
 			
-			//std::cout<<translation<<endl;
+			//std::cout<<T_imu0TOrectcam2<<endl;
 		}
 		free(namelist);
 	}
@@ -562,7 +604,7 @@ int main( int /*argc*/, char** /*argv*/ )
 		//maybe I can use some simple frame skip to instead it
 		static int framecnt = -1;
 		framecnt++;
-		fileNum = 8;
+		fileNum = 10;
 		if (framecnt >= fileNum)
 			break;
 		//bool isKeyframe;
@@ -651,7 +693,7 @@ int main( int /*argc*/, char** /*argv*/ )
 				
 				//!<convert 'hi' to 'Yi', 3D point under world coordinate system
 				cv::Mat Yi(1, 3, CV_32F);
-				Yi = ( rotationList[keyFrame].inv() * hi.t() + translationList[keyFrame].t() ).t();
+				Yi = ( rotationList[keyFrame].inv() * hi.t() - translationList[keyFrame].t() ).t();
 				//x = Yi.at<float>(0,0);
 				//y = Yi.at<float>(0,1);
 				//z = Yi.at<float>(0,2);
@@ -684,7 +726,7 @@ int main( int /*argc*/, char** /*argv*/ )
 				//reproject 3D point 'Yi' to m neighborhood frames
 				std::vector<float> weightList;
 				std::vector<cv::Mat> YiList;
-				bool flgReproject = true;
+				bool flgReprojectCheckPassed = true;
 				for (int k = 1; k <= m; k++)
 				{
 					int currentFrame = framecnt - m + k;
@@ -695,7 +737,7 @@ int main( int /*argc*/, char** /*argv*/ )
 					
 					//'Yi' will be project on current frame's 'Ui' pixel
 					cv::Mat Ui = cv::Mat::zeros(1, 3, CV_32F);
-					Ui = K * (rotation * (Yi - translation).t() );
+					Ui = K * (rotation * (Yi + translation).t() );
 					Ui = Ui / Ui.at<float>(0,2);
 					
 					//Now we got the pixel's position, let's check the disparity
@@ -706,7 +748,7 @@ int main( int /*argc*/, char** /*argv*/ )
 					//check if pixel out side the image
 					if (u<0 || u>1242 || v <0 || v> 375 ||isnan(u) ||isnan(v))
 					{
-						flgReproject = false;
+						flgReprojectCheckPassed = false;
 						break;
 					}
 					
@@ -716,7 +758,7 @@ int main( int /*argc*/, char** /*argv*/ )
 					//check if disparity is valid
 					if ( !(d > 0 && d < param.disp_max))
 					{
-						flgReproject = false;
+						flgReprojectCheckPassed = false;
 						break;
 					}
 
@@ -735,7 +777,7 @@ int main( int /*argc*/, char** /*argv*/ )
 					
 					if (w > Tcov)
 					{
-						flgReproject = false;
+						flgReprojectCheckPassed = false;
 						break;
 					}
 					weightList.push_back(w);//save point's weight(certainty) under current frame
@@ -746,16 +788,19 @@ int main( int /*argc*/, char** /*argv*/ )
 					float z = focus * (baseline / d);
 					float x = z * (j - u0) / focus;
 					float y = z * (i - v0) / focus;
-					cv::Mat Yi(1, 3, CV_32F);
-					Yi.at<float>(0,0) = x;
-					Yi.at<float>(0,1) = y;
-					Yi.at<float>(0,2) = z;
-					Yi = ( rotationList[keyFrame].inv() * Yi.t() + translationList[keyFrame].t() ).t();/////////////////////////////////////////////////////////currentFrame
-					YiList.push_back(Yi);//save current point's position under current frame
+					cv::Mat Yk(1, 3, CV_32F);
+					Yk.at<float>(0,0) = -y;
+					Yk.at<float>(0,1) = -z;
+					Yk.at<float>(0,2) = x;
+					//Yi.at<float>(0,0) = x;
+					//Yi.at<float>(0,1) = y;
+					//Yi.at<float>(0,2) = z;
+					Yk = ( rotationList[keyFrame].inv() * Yk.t() - translationList[keyFrame].t() ).t();/////////////////////////////////////////////////////////currentFrame
+					YiList.push_back(Yk);//save current point's position under current frame
 				}
 				
 				
-				if(flgReproject == false)
+				if(flgReprojectCheckPassed == false)
 					continue;
 				
 				
@@ -784,7 +829,7 @@ int main( int /*argc*/, char** /*argv*/ )
 				std::vector<float> NCCSList;
 				std::vector<cv::Vec3b> colorList;
 				float gp = 0;
-				bool flgPhotometric = true;
+				bool flgPhotometricCheckPassed = true;
 				for (int k = 1; k <= m; k++)
 				{
 					int currentFrame = framecnt - m + k;
@@ -797,7 +842,7 @@ int main( int /*argc*/, char** /*argv*/ )
 					cv::Mat& translation = translationList.at(keyFrame);/////////////////////////////////////////////////////////currentFrame
 					
 					cv::Mat Ui(1, 3, CV_32F);
-					Ui = K * (rotation * (Yi - translation).t() );
+					Ui = K * (rotation * (Yi + translation).t() );
 					Ui = Ui / Ui.at<float>(0,2);
 					tarPixel = Ui;
 					
@@ -808,7 +853,7 @@ int main( int /*argc*/, char** /*argv*/ )
 					colorList.push_back(bgr);
 					if (u - patchSize/2 <0 || u + patchSize/2>1242 || v - patchSize/2 <0 || v + patchSize/2> 375 ||isnan(u) ||isnan(v))
 					{
-						flgPhotometric = false;
+						flgPhotometricCheckPassed = false;
 						break;
 					}
 					
@@ -817,14 +862,14 @@ int main( int /*argc*/, char** /*argv*/ )
 					cv::Mat& _rotation = rotationList.at(keyFrame);
 					cv::Mat& _translation = translationList.at(keyFrame);
 					
-					Ui = K * (_rotation * (Yi - _translation).t() );
+					Ui = K * (_rotation * (Yi + _translation).t() );
 					Ui = Ui / Ui.at<float>(0,2);
 					curPixel = Ui;
 					u = curPixel.at<float>(0, 0);
 					v = curPixel.at<float>(0, 1);
 					if (u - patchSize/2 <0 || u + patchSize/2>1242 || v - patchSize/2 <0 || v + patchSize/2> 375 ||isnan(u) ||isnan(v))
 					{
-						flgPhotometric = false;
+						flgPhotometricCheckPassed = false;
 						break;
 					}
 				
@@ -832,7 +877,7 @@ int main( int /*argc*/, char** /*argv*/ )
 					gp = gp + NCCScore;
 					
 				}
-				if(flgPhotometric == false)
+				if(flgPhotometricCheckPassed == false)
 					continue;
 				gp = gp / 3;
 				if (gp > Tphoto)
