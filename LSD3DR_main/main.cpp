@@ -29,19 +29,19 @@
     //*******************************************
 void homogeneous2RT( cv::Mat& H, cv::Mat& R, cv::Mat& T)
 {
-	T.at<float>(0, 0) = H.at<float>(0, 3);
-	T.at<float>(0, 1) = H.at<float>(1, 3);
-	T.at<float>(0, 2) = H.at<float>(2, 3);
+	T.at<double>(0, 0) = H.at<double>(0, 3);
+	T.at<double>(0, 1) = H.at<double>(1, 3);
+	T.at<double>(0, 2) = H.at<double>(2, 3);
 	
-	R.at<float>(0, 0) = H.at<float>(0, 0);
-	R.at<float>(0, 1) = H.at<float>(0, 1);
-	R.at<float>(0, 2) = H.at<float>(0, 2);
-	R.at<float>(1, 0) = H.at<float>(1, 0);
-	R.at<float>(1, 1) = H.at<float>(1, 1);
-	R.at<float>(1, 2) = H.at<float>(1, 2);
-	R.at<float>(2, 0) = H.at<float>(2, 0);
-	R.at<float>(2, 1) = H.at<float>(2, 1);
-	R.at<float>(2, 2) = H.at<float>(2, 2);
+	R.at<double>(0, 0) = H.at<double>(0, 0);
+	R.at<double>(0, 1) = H.at<double>(0, 1);
+	R.at<double>(0, 2) = H.at<double>(0, 2);
+	R.at<double>(1, 0) = H.at<double>(1, 0);
+	R.at<double>(1, 1) = H.at<double>(1, 1);
+	R.at<double>(1, 2) = H.at<double>(1, 2);
+	R.at<double>(2, 0) = H.at<double>(2, 0);
+	R.at<double>(2, 1) = H.at<double>(2, 1);
+	R.at<double>(2, 2) = H.at<double>(2, 2);
 };
 
 
@@ -52,10 +52,10 @@ void homogeneous2RT( cv::Mat& H, cv::Mat& R, cv::Mat& T)
 void RT2homogeneous( cv::Mat& H, cv::Mat& R, cv::Mat& T)
 {
 	
-	H.at<float>(0, 0) = R.at<float>(0, 0);	H.at<float>(0, 1) = R.at<float>(0, 1);	H.at<float>(0, 2) = R.at<float>(0, 2);	H.at<float>(0, 3) = T.at<float>(0, 0);
-	H.at<float>(1, 0) = R.at<float>(1, 0);	H.at<float>(1, 1) = R.at<float>(1, 1);	H.at<float>(1, 2) = R.at<float>(1, 2);	H.at<float>(1, 3) = T.at<float>(0, 1);
-	H.at<float>(2, 0) = R.at<float>(2, 0);	H.at<float>(2, 1) = R.at<float>(2, 1);	H.at<float>(2, 2) = R.at<float>(2, 2);	H.at<float>(2, 3) = T.at<float>(0, 2);
-	H.at<float>(3, 0) = 0				;	H.at<float>(3, 1) = 0				;	H.at<float>(3, 2) = 0				;	H.at<float>(3, 3) = 1				;
+	H.at<double>(0, 0) = R.at<double>(0, 0);	H.at<double>(0, 1) = R.at<double>(0, 1);	H.at<double>(0, 2) = R.at<double>(0, 2);	H.at<double>(0, 3) = T.at<double>(0, 0);
+	H.at<double>(1, 0) = R.at<double>(1, 0);	H.at<double>(1, 1) = R.at<double>(1, 1);	H.at<double>(1, 2) = R.at<double>(1, 2);	H.at<double>(1, 3) = T.at<double>(0, 1);
+	H.at<double>(2, 0) = R.at<double>(2, 0);	H.at<double>(2, 1) = R.at<double>(2, 1);	H.at<double>(2, 2) = R.at<double>(2, 2);	H.at<double>(2, 3) = T.at<double>(0, 2);
+	H.at<double>(3, 0) = 0				;	H.at<double>(3, 1) = 0				;	H.at<double>(3, 2) = 0				;	H.at<double>(3, 3) = 1				;
 
 };
 
@@ -66,15 +66,15 @@ float NCC(cv::Mat& currentFrame, cv::Mat& targetFrame, cv::Mat& curPixel, cv::Ma
 	//*******************************************
 	// use ROI to get image patch
 	//*******************************************
-	float u = curPixel.at<float>(0, 0);
-	float v = curPixel.at<float>(0, 1);
+	float u = curPixel.at<double>(0, 0);
+	float v = curPixel.at<double>(0, 1);
 	cv::Mat curPatch;
 	cv::Rect curPosition(u - patchSize/2, v - patchSize /2, patchSize, patchSize);
 	currentFrame(curPosition).copyTo(curPatch);
 	
 	
-	u = tarPixel.at<float>(0, 0);
-	v = tarPixel.at<float>(0, 1);
+	u = tarPixel.at<double>(0, 0);
+	v = tarPixel.at<double>(0, 1);
 	cv::Mat tarPatch;
 	cv::Rect tarPosition(u - patchSize/2, v - patchSize /2, patchSize, patchSize);
 	targetFrame(tarPosition).copyTo(tarPatch);
@@ -130,7 +130,7 @@ void loadCalibrationKITTI(std::string infile, float& baseline, float& focus, flo
 		{
 			for (int j = 0; j < 3; j++)
 			{
-				input >> R_cam0TOrectcam0.at<float>(i, j);
+				input >> R_cam0TOrectcam0.at<double>(i, j);
 			}
 		}
 		std::getline(input, line);
@@ -166,14 +166,14 @@ void loadCalibrationKITTI(std::string infile, float& baseline, float& focus, flo
 		{
 			for (int j = 0; j < 3; j++)
 			{
-				input >> R_cam0grayTOcam2color.at<float>(i, j);
+				input >> R_cam0grayTOcam2color.at<double>(i, j);
 			}
 		}
 		//read T
 		input >> matrixName;
 		for (int i = 0; i < 3; i++)
 		{
-			input >> T_cam0grayTOcam2color.at<float>(0, i);
+			input >> T_cam0grayTOcam2color.at<double>(0, i);
 		}
 		std::getline(input, line);//to next line
 		std::getline(input, line);//skip Sr
@@ -184,7 +184,7 @@ void loadCalibrationKITTI(std::string infile, float& baseline, float& focus, flo
 		{
 			for (int j = 0; j < 3; j++)
 			{
-				input >> R_cam2TOrectcam2.at<float>(i, j);
+				input >> R_cam2TOrectcam2.at<double>(i, j);
 			}
 		}
 		
@@ -253,10 +253,10 @@ int main( int /*argc*/, char** /*argv*/ )
 	float focus;
 	float u0;
 	float v0;
-	cv::Mat R_cam0grayTOcam2color(3, 3, CV_32F);
-	cv::Mat R_cam2TOrectcam2(3, 3, CV_32F);
-	cv::Mat R_cam0TOrectcam0(3, 3, CV_32F);
-	cv::Mat T_cam0grayTOcam2color(1, 3, CV_32F);
+	cv::Mat R_cam0grayTOcam2color(3, 3, CV_64F);
+	cv::Mat R_cam2TOrectcam2(3, 3, CV_64F);
+	cv::Mat R_cam0TOrectcam0(3, 3, CV_64F);
+	cv::Mat T_cam0grayTOcam2color(1, 3, CV_64F);
 	loadCalibrationKITTI(infile, baseline, focus, u0, v0, R_cam0grayTOcam2color, T_cam0grayTOcam2color, R_cam2TOrectcam2, R_cam0TOrectcam0 );
 	std::cout<<" calib_cam_to_cam.txt loaded. "<<endl;
 	//std::cout<<" R_cam0grayTOcam2color: "<<endl<<R_cam0grayTOcam2color<<endl;
@@ -269,8 +269,8 @@ int main( int /*argc*/, char** /*argv*/ )
 	
 	//!<get other calibration information
 	//first imu to velo
-	cv::Mat R_imu2velo(3, 3, CV_32F);
-	cv::Mat T_imu2velo(1, 3, CV_32F);
+	cv::Mat R_imu2velo(3, 3, CV_64F);
+	cv::Mat T_imu2velo(1, 3, CV_64F);
 	{
 		std::string infile = "/home/zhao/Project/KITTI/2011_09_26/calib_imu_to_velo.txt" ;
 		fstream input(infile.c_str(), ios::in);
@@ -287,14 +287,14 @@ int main( int /*argc*/, char** /*argv*/ )
 		{
 			for (int j = 0; j < 3; j++)
 			{
-				input >> R_imu2velo.at<float>(i, j);
+				input >> R_imu2velo.at<double>(i, j);
 			}
 		}
 		
 		input >> matrixName;
 		for (int i = 0; i < 3; i++)
 		{
-			input >> T_imu2velo.at<float>(0, i);
+			input >> T_imu2velo.at<double>(0, i);
 		}
 		
 		input.close();
@@ -303,8 +303,8 @@ int main( int /*argc*/, char** /*argv*/ )
 	//std::cout<<" R_imu2velo: "<<endl<<R_imu2velo<<endl;
 	
 	//then velo to camera
-	cv::Mat R_velo2cam0(3, 3, CV_32F);
-	cv::Mat T_velo2cam0(1, 3, CV_32F);
+	cv::Mat R_velo2cam0(3, 3, CV_64F);
+	cv::Mat T_velo2cam0(1, 3, CV_64F);
 	{
 		std::string infile = "/home/zhao/Project/KITTI/2011_09_26/calib_velo_to_cam.txt" ;
 		fstream input(infile.c_str(), ios::in);
@@ -321,14 +321,14 @@ int main( int /*argc*/, char** /*argv*/ )
 		{
 			for (int j = 0; j < 3; j++)
 			{
-				input >> R_velo2cam0.at<float>(i, j);
+				input >> R_velo2cam0.at<double>(i, j);
 			}
 		}
 		
 		input >> matrixName;
 		for (int i = 0; i < 3; i++)
 		{
-			input >> T_velo2cam0.at<float>(0, i);
+			input >> T_velo2cam0.at<double>(0, i);
 		}
 		
 		input.close();
@@ -386,7 +386,7 @@ int main( int /*argc*/, char** /*argv*/ )
 		
 		
 		
-		cv::Mat H_imu0(4, 4, CV_32F);
+		cv::Mat H_imu0(4, 4, CV_64F);
 		for (int i = 2; i < fileNum; ++i) 
 		{
 			fstream input(dirname + namelist[i]->d_name, ios::in);
@@ -412,12 +412,12 @@ int main( int /*argc*/, char** /*argv*/ )
 			//!< (mx,my): is the location of IMU/GPS in the mercator map. The world coordinate system is based on the mercator map.
 			
 			//!< R,T between IMU/GPS coordinate system from i-th frame to the 1st frame
-			cv::Mat R_imu2imu0(3, 3, CV_32F);
-			cv::Mat T_imu2imu0(1, 3, CV_32F);
+			cv::Mat R_imu2imu0(3, 3, CV_64F);
+			cv::Mat T_imu2imu0(1, 3, CV_64F);
 			
-			T_imu2imu0.at<float>(0, 0) = mx;
-			T_imu2imu0.at<float>(0, 1) = my;
-			T_imu2imu0.at<float>(0, 2) = alt; //!< hight from the sea level? [m]
+			T_imu2imu0.at<double>(0, 0) = mx;
+			T_imu2imu0.at<double>(0, 1) = my;
+			T_imu2imu0.at<double>(0, 2) = alt; //!< hight from the sea level? [m]
 			//std::cout<<translation<<endl;
 			
 			
@@ -426,34 +426,34 @@ int main( int /*argc*/, char** /*argv*/ )
 			double ry = yaw; // pitch
 			double rz = pitch; // heading 
 			
-			cv::Mat Rx = (cv::Mat_<float>(3,3) << 1, 0, 0, 0, cos(rx), -sin(rx), 0, sin(rx), cos(rx));// base => nav  (level oxts => rotated oxts)
-			cv::Mat Ry = (cv::Mat_<float>(3,3) << cos(ry), 0, sin(ry), 0, 1, 0, -sin(ry), 0, cos(ry));// base => nav  (level oxts => rotated oxts)
-			cv::Mat Rz = (cv::Mat_<float>(3,3) << cos(rz), -sin(rz), 0, sin(rz), cos(rz), 0, 0, 0, 1);// base => nav  (level oxts => rotated oxts)
+			cv::Mat Rx = (cv::Mat_<double>(3,3) << 1, 0, 0, 0, cos(rx), -sin(rx), 0, sin(rx), cos(rx));// base => nav  (level oxts => rotated oxts)
+			cv::Mat Ry = (cv::Mat_<double>(3,3) << cos(ry), 0, sin(ry), 0, 1, 0, -sin(ry), 0, cos(ry));// base => nav  (level oxts => rotated oxts)
+			cv::Mat Rz = (cv::Mat_<double>(3,3) << cos(rz), -sin(rz), 0, sin(rz), cos(rz), 0, 0, 0, 1);// base => nav  (level oxts => rotated oxts)
 			R_imu2imu0 = Rz*Ry*Rx;
 			//std::cout<<rotation<<endl;
 			
-			cv::Mat T_imu0TOrectcam2(1, 3, CV_32F);
-			cv::Mat R_imu0TOrectcam2(3, 3, CV_32F);
+			cv::Mat T_imu0TOrectcam2(1, 3, CV_64F);
+			cv::Mat R_imu0TOrectcam2(3, 3, CV_64F);
 			//!< Now let's translate this IMUGPS position to left camera's
 			{
-				cv::Mat H_imu2velo(4, 4, CV_32F);
+				cv::Mat H_imu2velo(4, 4, CV_64F);
 				RT2homogeneous(H_imu2velo, R_imu2velo, T_imu2velo);
 				
-				cv::Mat H_velo2cam0(4, 4, CV_32F);
+				cv::Mat H_velo2cam0(4, 4, CV_64F);
 				RT2homogeneous(H_velo2cam0, R_velo2cam0, T_velo2cam0);
 				
-				cv::Mat H_cam0grayTOcam2color(4, 4, CV_32F);
+				cv::Mat H_cam0grayTOcam2color(4, 4, CV_64F);
 				RT2homogeneous(H_cam0grayTOcam2color, R_cam0grayTOcam2color, T_cam0grayTOcam2color);
 				
-				cv::Mat H_cam2TOrectcam2(4, 4, CV_32F);
-				cv::Mat T_cam2TOrectcam2 = (cv::Mat_<float>(1,3) << 0, 0, 0);
+				cv::Mat H_cam2TOrectcam2(4, 4, CV_64F);
+				cv::Mat T_cam2TOrectcam2 = (cv::Mat_<double>(1,3) << 0, 0, 0);
 				RT2homogeneous(H_cam2TOrectcam2, R_cam2TOrectcam2, T_cam2TOrectcam2);
 				
-				cv::Mat H_cam0TOrectcam0(4, 4, CV_32F);
-				cv::Mat T_cam0TOrectcam0 = (cv::Mat_<float>(1,3) << 0, 0, 0);
+				cv::Mat H_cam0TOrectcam0(4, 4, CV_64F);
+				cv::Mat T_cam0TOrectcam0 = (cv::Mat_<double>(1,3) << 0, 0, 0);
 				RT2homogeneous(H_cam0TOrectcam0, R_cam0TOrectcam0, T_cam0TOrectcam0);
 				
-				cv::Mat H_imu2imu0(4, 4, CV_32F);
+				cv::Mat H_imu2imu0(4, 4, CV_64F);
 				RT2homogeneous(H_imu2imu0, R_imu2imu0, T_imu2imu0);
 				if (i == 2)
 				{
@@ -463,12 +463,12 @@ int main( int /*argc*/, char** /*argv*/ )
 				
 				//<! now this matrix will trans ith frame's point(scanner frame) into world's frame(first frame's coordinate)
 				
-				cv::Mat  H_imu0TOrectcam2(4, 4, CV_32F);
-				//H_imu0TOrectcam2 = H_cam2TOrectcam2 * H_cam0grayTOcam2color * H_velo2cam0 * H_imu2velo * H_imu2imu0;
+				cv::Mat  H_imu0TOrectcam2(4, 4, CV_64F);
+				H_imu0TOrectcam2 = H_cam2TOrectcam2 * H_cam0grayTOcam2color * H_velo2cam0 * H_imu2velo * H_imu2imu0;
 				
 				//(H_imu0.inv() * H_imu2imu0) for normalize frame0's position to origin 
 				//if we do this, accurcy will descrace
-				H_imu0TOrectcam2 = H_cam2TOrectcam2 * H_cam0grayTOcam2color * H_velo2cam0 * H_imu2velo * (H_imu0.inv() * H_imu2imu0).inv();
+				//H_imu0TOrectcam2 = H_cam2TOrectcam2 * H_cam0grayTOcam2color * H_velo2cam0 * H_imu2velo * (H_imu0.inv() * H_imu2imu0).inv();
 				//transformList.push_back(H_imu0TOrectcam2);
 				
 				//std::cout<<H_cam2TOrectcam2 * H_cam0grayTOcam2color * H_velo2cam0 * H_imu2velo<<endl;
@@ -575,12 +575,12 @@ int main( int /*argc*/, char** /*argv*/ )
 	
 
 	//!<camera matrix K for reproject 3D points to image
-	cv::Mat K = cv::Mat::zeros(3, 3, CV_32F);
-	K.at<float>(0,0) = focus;
-	K.at<float>(1,1) = focus;
-	K.at<float>(2,2) = 1.0;
-	K.at<float>(0,2) = u0;
-	K.at<float>(1,2) = v0;
+	cv::Mat K = cv::Mat::zeros(3, 3, CV_64F);
+	K.at<double>(0,0) = focus;
+	K.at<double>(1,1) = focus;
+	K.at<double>(2,2) = 1.0;
+	K.at<double>(0,2) = u0;
+	K.at<double>(1,2) = v0;
 	std::cout<<" K is "<<endl<<K<<endl;
 	
 	
@@ -685,38 +685,39 @@ int main( int /*argc*/, char** /*argv*/ )
 				float z = focus * (baseline / d);
 				float x = z * (j - u0) / focus;
 				float y = z * (i - v0) / focus;
-				cv::Mat hi(1, 3, CV_32F);
-				hi.at<float>(0,0) = x;
-				hi.at<float>(0,1) = y;
-				hi.at<float>(0,2) = z;
+				cv::Mat hi(1, 3, CV_64F);
+				hi.at<double>(0,0) = x;
+				hi.at<double>(0,1) = y;
+				hi.at<double>(0,2) = z;
 				
 				
 				//!<convert 'hi' to 'Yi', 3D point under world coordinate system
-				cv::Mat Yi(1, 3, CV_32F);
-				Yi = ( rotationList[keyFrame].inv() * hi.t() - translationList[keyFrame].t() ).t();
-				//x = Yi.at<float>(0,0);
-				//y = Yi.at<float>(0,1);
-				//z = Yi.at<float>(0,2);
+				cv::Mat Yi(1, 3, CV_64F);
+				Yi = ( rotationList[keyFrame].inv() * hi.t() + translationList[keyFrame].t() ).t();
+				//Yi = ( rotationList[keyFrame].inv() *  (hi.t() - translationList[keyFrame].t()) ).t();
+				//x = Yi.at<double>(0,0);
+				//y = Yi.at<double>(0,1);
+				//z = Yi.at<double>(0,2);
 				//std::cout<<Yi<<endl;
 				
 				
 				//!<compute covariance Pi as equation
 				//Pi = Ji * Si * Ji'
-				cv::Mat Si = cv::Mat::zeros(3, 3, CV_32F);
-				Si.at<float>(0,0) = pointingError * pointingError;
-				Si.at<float>(1,1) = pointingError * pointingError;
-				Si.at<float>(2,2) = matchingError * matchingError;
+				cv::Mat Si = cv::Mat::zeros(3, 3, CV_64F);
+				Si.at<double>(0,0) = pointingError * pointingError;
+				Si.at<double>(1,1) = pointingError * pointingError;
+				Si.at<double>(2,2) = matchingError * matchingError;
 				
-				cv::Mat Ji = cv::Mat::zeros(3, 3, CV_32F);
-				Ji.at<float>(0,0) = baseline / d;
-				Ji.at<float>(0,2) = - (j * baseline / (d*d) );
-				Ji.at<float>(1,1) = baseline / d;
-				Ji.at<float>(1,2) = - (i * baseline / (d*d) );
-				Ji.at<float>(2,2) = - (focus * baseline / (d*d) );
+				cv::Mat Ji = cv::Mat::zeros(3, 3, CV_64F);
+				Ji.at<double>(0,0) = baseline / d;
+				Ji.at<double>(0,2) = - (j * baseline / (d*d) );
+				Ji.at<double>(1,1) = baseline / d;
+				Ji.at<double>(1,2) = - (i * baseline / (d*d) );
+				Ji.at<double>(2,2) = - (focus * baseline / (d*d) );
 				
-				cv::Mat Pi = cv::Mat::zeros(3, 3, CV_32F);
+				cv::Mat Pi = cv::Mat::zeros(3, 3, CV_64F);
 				Pi = Ji * Si * Ji.t();
-				float w = Pi.at<float>(0,0) + Pi.at<float>(1,1) + Pi.at<float>(2,2);
+				float w = Pi.at<double>(0,0) + Pi.at<double>(1,1) + Pi.at<double>(2,2);
 				
 				//!<check if wi < Tcov, the first check 
 				if (w > Tcov)
@@ -724,7 +725,7 @@ int main( int /*argc*/, char** /*argv*/ )
 				
 				
 				//reproject 3D point 'Yi' to m neighborhood frames
-				std::vector<float> weightList;
+				std::vector<double> weightList;
 				std::vector<cv::Mat> YiList;
 				bool flgReprojectCheckPassed = true;
 				for (int k = 1; k <= m; k++)
@@ -736,13 +737,14 @@ int main( int /*argc*/, char** /*argv*/ )
 					
 					
 					//'Yi' will be project on current frame's 'Ui' pixel
-					cv::Mat Ui = cv::Mat::zeros(1, 3, CV_32F);
-					Ui = K * (rotation * (Yi + translation).t() );
-					Ui = Ui / Ui.at<float>(0,2);
+					cv::Mat Ui = cv::Mat::zeros(1, 3, CV_64F);
+					Ui = K * (rotation * (Yi - translation).t() );
+					//Ui = K * (rotationList[keyFrame] * Yi.t() + translationList[keyFrame].t());
+					Ui = Ui / Ui.at<double>(0,2);
 					
 					//Now we got the pixel's position, let's check the disparity
-					float u = Ui.at<float>(0,0);
-					float v = Ui.at<float>(0,1);
+					float u = Ui.at<double>(0,0);
+					float v = Ui.at<double>(0,1);
 					
 					
 					//check if pixel out side the image
@@ -766,14 +768,14 @@ int main( int /*argc*/, char** /*argv*/ )
 					//!<Use the same method with wi's check
 					//!<since the Si is already set, we need only to refill the Ji
 					
-					Ji.at<float>(0,0) = baseline / d;
-					Ji.at<float>(0,2) = - (j * baseline / (d*d) );
-					Ji.at<float>(1,1) = baseline / d;
-					Ji.at<float>(1,2) = - (i * baseline / (d*d) );
-					Ji.at<float>(2,2) = - (focus * baseline / (d*d) );
+					Ji.at<double>(0,0) = baseline / d;
+					Ji.at<double>(0,2) = - (j * baseline / (d*d) );
+					Ji.at<double>(1,1) = baseline / d;
+					Ji.at<double>(1,2) = - (i * baseline / (d*d) );
+					Ji.at<double>(2,2) = - (focus * baseline / (d*d) );
 					
 					Pi = Ji * Si * Ji.t();
-					float w = Pi.at<float>(0,0) + Pi.at<float>(1,1) + Pi.at<float>(2,2);//trace of Pi
+					float w = Pi.at<double>(0,0) + Pi.at<double>(1,1) + Pi.at<double>(2,2);//trace of Pi
 					
 					if (w > Tcov)
 					{
@@ -788,14 +790,15 @@ int main( int /*argc*/, char** /*argv*/ )
 					float z = focus * (baseline / d);
 					float x = z * (j - u0) / focus;
 					float y = z * (i - v0) / focus;
-					cv::Mat Yk(1, 3, CV_32F);
-					Yk.at<float>(0,0) = -y;
-					Yk.at<float>(0,1) = -z;
-					Yk.at<float>(0,2) = x;
-					//Yi.at<float>(0,0) = x;
-					//Yi.at<float>(0,1) = y;
-					//Yi.at<float>(0,2) = z;
-					Yk = ( rotationList[keyFrame].inv() * Yk.t() - translationList[keyFrame].t() ).t();/////////////////////////////////////////////////////////currentFrame
+					cv::Mat Yk(1, 3, CV_64F);
+					Yk.at<double>(0,0) = -y;
+					Yk.at<double>(0,1) = -z;
+					Yk.at<double>(0,2) = x;
+					//Yk.at<double>(0,0) = x;
+					//Yk.at<double>(0,1) = y;
+					//Yk.at<double>(0,2) = z;
+					Yk = ( rotationList[keyFrame].inv() * Yk.t() + translationList[keyFrame].t() ).t();/////////////////////////////////////////////////////////currentFrame
+					//Yk = ( rotationList[keyFrame].inv() *  (Yk.t() - translationList[keyFrame].t()) ).t();
 					YiList.push_back(Yk);//save current point's position under current frame
 				}
 				
@@ -826,11 +829,11 @@ int main( int /*argc*/, char** /*argv*/ )
 				//*******************************************
 				//In the paper this is done with image's all 3 channals
 				//Use the grey scale instead
-				std::vector<float> NCCSList;
+				std::vector<double> NCCSList;
 				std::vector<cv::Vec3b> colorList;
 				float gp = 0;
 				bool flgPhotometricCheckPassed = true;
-				for (int k = 1; k <= m; k++)
+				/*for (int k = 1; k <= m; k++)
 				{
 					int currentFrame = framecnt - m + k;
 					cv::Mat curPixel;
@@ -841,14 +844,14 @@ int main( int /*argc*/, char** /*argv*/ )
 					cv::Mat& rotation = rotationList.at(keyFrame);/////////////////////////////////////////////////////////currentFrame
 					cv::Mat& translation = translationList.at(keyFrame);/////////////////////////////////////////////////////////currentFrame
 					
-					cv::Mat Ui(1, 3, CV_32F);
+					cv::Mat Ui(1, 3, CV_64F);
 					Ui = K * (rotation * (Yi + translation).t() );
-					Ui = Ui / Ui.at<float>(0,2);
+					Ui = Ui / Ui.at<double>(0,2);
 					tarPixel = Ui;
 					
 					//save pixel value in target frame
-					float u = tarPixel.at<float>(0, 0);
-					float v = tarPixel.at<float>(0, 1);
+					float u = tarPixel.at<double>(0, 0);
+					float v = tarPixel.at<double>(0, 1);
 					cv::Vec3b bgr = LRefectedList[keyFrame].at<cv::Vec3b>(v,u);/////////////////////////////////////////////////////////currentFrame
 					colorList.push_back(bgr);
 					if (u - patchSize/2 <0 || u + patchSize/2>1242 || v - patchSize/2 <0 || v + patchSize/2> 375 ||isnan(u) ||isnan(v))
@@ -863,10 +866,10 @@ int main( int /*argc*/, char** /*argv*/ )
 					cv::Mat& _translation = translationList.at(keyFrame);
 					
 					Ui = K * (_rotation * (Yi + _translation).t() );
-					Ui = Ui / Ui.at<float>(0,2);
+					Ui = Ui / Ui.at<double>(0,2);
 					curPixel = Ui;
-					u = curPixel.at<float>(0, 0);
-					v = curPixel.at<float>(0, 1);
+					u = curPixel.at<double>(0, 0);
+					v = curPixel.at<double>(0, 1);
 					if (u - patchSize/2 <0 || u + patchSize/2>1242 || v - patchSize/2 <0 || v + patchSize/2> 375 ||isnan(u) ||isnan(v))
 					{
 						flgPhotometricCheckPassed = false;
@@ -881,7 +884,7 @@ int main( int /*argc*/, char** /*argv*/ )
 					continue;
 				gp = gp / 3;
 				if (gp > Tphoto)
-					continue;
+					continue;*/
 				
 				
 				//<!if the pixel passed the both test, fuse it in to point cloud
@@ -896,14 +899,14 @@ int main( int /*argc*/, char** /*argv*/ )
 				int pr = 0;
 				for (int i = 0; i < m; i++)
 				{
-					point.x += YiList[i].at<float>(0, 0) * weightList[i];
-					point.y += YiList[i].at<float>(0, 1) * weightList[i];
-					point.z += YiList[i].at<float>(0, 2) * weightList[i];
+					point.x += YiList[i].at<double>(0, 0) * weightList[i];
+					point.y += YiList[i].at<double>(0, 1) * weightList[i];
+					point.z += YiList[i].at<double>(0, 2) * weightList[i];
 					weightSum = weightSum + weightList[i];
 					
-					pb = colorList[i].val[0] * weightList[i];
-					pg = colorList[i].val[1] * weightList[i];
-					pr = colorList[i].val[2] * weightList[i];
+					//pb = colorList[i].val[0] * weightList[i];
+					//pg = colorList[i].val[1] * weightList[i];
+					//pr = colorList[i].val[2] * weightList[i];
 					
 				}
 				point.x = point.x / weightSum;
