@@ -464,11 +464,11 @@ int main( int /*argc*/, char** /*argv*/ )
 				//<! now this matrix will trans ith frame's point(scanner frame) into world's frame(first frame's coordinate)
 				
 				cv::Mat  H_imu0TOrectcam2(4, 4, CV_64F);
-				H_imu0TOrectcam2 = H_cam2TOrectcam2 * H_cam0grayTOcam2color * H_velo2cam0 * H_imu2velo * H_imu2imu0;
+				//H_imu0TOrectcam2 = H_cam2TOrectcam2 * H_cam0grayTOcam2color * H_velo2cam0 * H_imu2velo * H_imu2imu0;
 				
 				//(H_imu0.inv() * H_imu2imu0) for normalize frame0's position to origin 
 				//if we do this, accurcy will descrace
-				//H_imu0TOrectcam2 = H_cam2TOrectcam2 * H_cam0grayTOcam2color * H_velo2cam0 * H_imu2velo * (H_imu0.inv() * H_imu2imu0).inv();
+				H_imu0TOrectcam2 = H_cam2TOrectcam2 * H_cam0grayTOcam2color * H_velo2cam0 * H_imu2velo * (H_imu0.inv() * H_imu2imu0).inv();
 				//transformList.push_back(H_imu0TOrectcam2);
 				
 				//std::cout<<H_cam2TOrectcam2 * H_cam0grayTOcam2color * H_velo2cam0 * H_imu2velo<<endl;
@@ -693,8 +693,8 @@ int main( int /*argc*/, char** /*argv*/ )
 				
 				//!<convert 'hi' to 'Yi', 3D point under world coordinate system
 				cv::Mat Yi(1, 3, CV_64F);
-				Yi = ( rotationList[keyFrame].inv() * hi.t() + translationList[keyFrame].t() ).t();
-				//Yi = ( rotationList[keyFrame].inv() *  (hi.t() - translationList[keyFrame].t()) ).t();
+				//Yi = ( rotationList[keyFrame].inv() * hi.t() + translationList[keyFrame].t() ).t();
+				Yi = ( rotationList[keyFrame].inv() *  (hi.t() - translationList[keyFrame].t()) ).t();
 				//x = Yi.at<double>(0,0);
 				//y = Yi.at<double>(0,1);
 				//z = Yi.at<double>(0,2);
@@ -738,8 +738,8 @@ int main( int /*argc*/, char** /*argv*/ )
 					
 					//'Yi' will be project on current frame's 'Ui' pixel
 					cv::Mat Ui = cv::Mat::zeros(1, 3, CV_64F);
-					Ui = K * (rotation * (Yi - translation).t() );
-					//Ui = K * (rotationList[keyFrame] * Yi.t() + translationList[keyFrame].t());
+					//Ui = K * (rotation * (Yi - translation).t() );
+					Ui = K * (rotationList[keyFrame] * Yi.t() + translationList[keyFrame].t());
 					Ui = Ui / Ui.at<double>(0,2);
 					
 					//Now we got the pixel's position, let's check the disparity
@@ -791,14 +791,14 @@ int main( int /*argc*/, char** /*argv*/ )
 					float x = z * (j - u0) / focus;
 					float y = z * (i - v0) / focus;
 					cv::Mat Yk(1, 3, CV_64F);
-					Yk.at<double>(0,0) = -y;
-					Yk.at<double>(0,1) = -z;
-					Yk.at<double>(0,2) = x;
-					//Yk.at<double>(0,0) = x;
-					//Yk.at<double>(0,1) = y;
-					//Yk.at<double>(0,2) = z;
-					Yk = ( rotationList[keyFrame].inv() * Yk.t() + translationList[keyFrame].t() ).t();/////////////////////////////////////////////////////////currentFrame
-					//Yk = ( rotationList[keyFrame].inv() *  (Yk.t() - translationList[keyFrame].t()) ).t();
+					//Yk.at<double>(0,0) = -y;
+					//Yk.at<double>(0,1) = -z;
+					//Yk.at<double>(0,2) = x;
+					Yk.at<double>(0,0) = x;
+					Yk.at<double>(0,1) = y;
+					Yk.at<double>(0,2) = z;
+					//Yk = ( rotationList[keyFrame].inv() * Yk.t() + translationList[keyFrame].t() ).t();/////////////////////////////////////////////////////////currentFrame
+					Yk = ( rotationList[keyFrame].inv() *  (Yk.t() - translationList[keyFrame].t()) ).t();
 					YiList.push_back(Yk);//save current point's position under current frame
 				}
 				
