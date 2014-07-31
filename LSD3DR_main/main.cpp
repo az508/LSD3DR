@@ -11,6 +11,7 @@
 #include <cv.hpp> //!< OpenCV C++ class. not "cv.h" which is for C.
 
 #include "elas.h" //!< Geiger's ACCV2010 paper implementation
+#include "viso_stereo.h"
 
 #include <boost/thread/thread.hpp>
 #include <boost/graph/graph_concepts.hpp>
@@ -22,6 +23,8 @@
 #include <pcl/filters/radius_outlier_removal.h>
 #include <pcl/filters/voxel_grid.h>
 
+#include <opencv2/core/eigen.hpp>
+#include <Eigen/LU> 
 
     //*******************************************
     //Take homogeneous transformation matrix,
@@ -59,18 +62,18 @@ void RT2homogeneous( cv::Mat& H, cv::Mat& R, cv::Mat& T)
 
 };
 
-float NCC(cv::Mat& currentFrame, cv::Mat& targetFrame, cv::Mat& curPixel, cv::Mat& tarPixel,int patchSize)
+float NCC(cv::Mat& keyFrame, cv::Mat& targetFrame, cv::Mat& keyPixel, cv::Mat& tarPixel,int patchSize)
 {
 	cv::Mat result;
 	
 	//*******************************************
 	// use ROI to get image patch
 	//*******************************************
-	float u = curPixel.at<double>(0, 0);
-	float v = curPixel.at<double>(0, 1);
+	float u = keyPixel.at<double>(0, 0);
+	float v = keyPixel.at<double>(0, 1);
 	cv::Mat curPatch;
 	cv::Rect curPosition(u - patchSize/2, v - patchSize /2, patchSize, patchSize);
-	currentFrame(curPosition).copyTo(curPatch);
+	keyFrame(curPosition).copyTo(curPatch);
 	
 	
 	u = tarPixel.at<double>(0, 0);
@@ -86,7 +89,7 @@ float NCC(cv::Mat& currentFrame, cv::Mat& targetFrame, cv::Mat& curPixel, cv::Ma
 
 
 	
-void loadCalibrationKITTI(std::string infile, float& baseline, float& focus, float& u0, float& v0, cv::Mat& R_cam0grayTOcam2color, cv::Mat& T_cam0grayTOcam2color, cv::Mat& R_cam2TOrectcam2, cv::Mat& R_cam0TOrectcam0 )
+void loadCalibrationKITTI(std::string infile, float& baseline, float& focus, float& u0, float& v0, cv::Mat& R_cam0grayTOcam2color, cv::Mat& T_cam0grayTOcam2color, cv::Mat& R_cam2TOrectcam2, cv::Mat& R_cam0TOrectcam0, float& fb2 )
 {
 	// calib_cam_to_cam.txt: Camera-to-camera calibration
 	// --------------------------------------------------
@@ -135,6 +138,7 @@ void loadCalibrationKITTI(std::string infile, float& baseline, float& focus, flo
 		}
 		std::getline(input, line);
 		std::getline(input, line);//skip Pr
+		
 	}
 	{
 		std::getline(input, line);//skip S
@@ -150,7 +154,7 @@ void loadCalibrationKITTI(std::string infile, float& baseline, float& focus, flo
 	}
 	//!<get calibration of two color camera
 
-	float fb2, fb3;
+	float fb3;
 	//left color
 	{
 		std::string matrixName;
@@ -234,9 +238,84 @@ void loadCalibrationKITTI(std::string infile, float& baseline, float& focus, flo
 	input.close();
 };
 
+    //*******************************************
+    //Take directory name as input
+    //Output a vector of images
+    //*******************************************
+void loadImageInKITTI( std::string& dirName, std::vector<cv::Mat>& outputVector )
+{
+		struct dirent **namelist;
+		int fileNum = scandir(dirName.c_str(), &namelist, NULL, alphasort);
+		if(fileNum == -1) {
+			err(EXIT_FAILURE, "%s", dirName.c_str());
+		}
+		//(void) printf ("%d\n", fileNum);
+		for (int i = 2; i < fileNum; ++i) 
+		{
+			//(void) printf("%s\n", namelist[i]->d_name);
+			
+			//std::cout<<dirName + namelist[i]->d_name<<std::endl;
+			cv::Mat pic = cv::imread(dirName + namelist[i]->d_name, 1);
+			outputVector.push_back(pic);
+			
+			free(namelist[i]);
+		}
+		free(namelist);
+};
 
-
-
+void estimateCameraPoseByViso2 (float focus, float cu, float cv, float baseline, std::vector<cv::Mat>& LRefectedList, std::vector<cv::Mat>& RRefectedList, std::vector<cv::Mat>& cameraPoseList)
+{
+	// set most important visual odometry parameters
+	// for a full parameter list, look at: viso_stereo.h
+	VisualOdometryStereo::parameters param;
+	
+	// calibration parameters for sequence 2010_03_09_drive_0019 
+	param.calib.f  = focus; // focal length in pixels
+	param.calib.cu = cu; // principal point (u-coordinate) in pixels
+	param.calib.cv = cv; // principal point (v-coordinate) in pixels
+	param.base     = baseline; // baseline in meters
+	
+	// init visual odometry
+	VisualOdometryStereo viso(param);
+	
+	// current pose (this matrix transforms a point from the current
+	// frame's camera coordinates to the first frame's camera coordinates)
+	Matrix pose = Matrix::eye(4);
+	
+	for (int i = 0; i < LRefectedList.size(); i++)
+	{
+		int32_t dims[] = {1242, 375, 1242};
+		cv::Mat grayLeftRefected;
+		cv::Mat grayRightRefected;
+		cv::cvtColor(LRefectedList[i],grayLeftRefected,CV_BGR2GRAY);
+		cv::cvtColor(RRefectedList[i],grayRightRefected,CV_BGR2GRAY);
+		
+		
+		if (viso.process(grayLeftRefected.data,grayRightRefected.data,dims)) 
+		{
+		
+			// on success, update current pose
+			pose = pose * Matrix::inv(viso.getMotion());
+		
+			// output some statistics
+			double num_matches = viso.getNumberOfMatches();
+			double num_inliers = viso.getNumberOfInliers();
+			cout << "Frame: " << i;
+			cout << ", Matches: " << num_matches;
+			cout << ", Inliers: " << 100.0*num_inliers/num_matches << " %" << ", Current pose: " << endl;
+			cout << pose << endl << endl;
+			
+			
+			cv::Mat H = (cv::Mat_<double>(4,4) << pose.val[0][0], pose.val[0][1], pose.val[0][2], pose.val[0][3], 
+												pose.val[1][0], pose.val[1][1], pose.val[1][2], pose.val[1][3], 
+												pose.val[2][0], pose.val[2][1], pose.val[2][2], pose.val[2][3], 
+												pose.val[3][0], pose.val[3][1], pose.val[3][2], pose.val[3][3] );
+			cameraPoseList.push_back(H);
+		} else {
+			cout << " ... failed!" << endl;
+		}
+	}
+};
 
 int main( int /*argc*/, char** /*argv*/ )
 {
@@ -250,6 +329,7 @@ int main( int /*argc*/, char** /*argv*/ )
     //!< load camera calibration info
 	//need to learn about the format of KITTI
 	float baseline;
+	float fb2;
 	float focus;
 	float u0;
 	float v0;
@@ -257,7 +337,7 @@ int main( int /*argc*/, char** /*argv*/ )
 	cv::Mat R_cam2TOrectcam2(3, 3, CV_64F);
 	cv::Mat R_cam0TOrectcam0(3, 3, CV_64F);
 	cv::Mat T_cam0grayTOcam2color(1, 3, CV_64F);
-	loadCalibrationKITTI(infile, baseline, focus, u0, v0, R_cam0grayTOcam2color, T_cam0grayTOcam2color, R_cam2TOrectcam2, R_cam0TOrectcam0 );
+	loadCalibrationKITTI(infile, baseline, focus, u0, v0, R_cam0grayTOcam2color, T_cam0grayTOcam2color, R_cam2TOrectcam2, R_cam0TOrectcam0, fb2 );
 	std::cout<<" calib_cam_to_cam.txt loaded. "<<endl;
 	//std::cout<<" R_cam0grayTOcam2color: "<<endl<<R_cam0grayTOcam2color<<endl;
 	//std::cout<<" R_cam2TOrectcam2: "<<endl<<R_cam2TOrectcam2<<endl;
@@ -265,7 +345,8 @@ int main( int /*argc*/, char** /*argv*/ )
     //!< load camera position info
 	std::vector<cv::Mat> rotationList;
 	std::vector<cv::Mat> translationList;
-	std::vector<cv::Mat> transformList;
+	std::vector<cv::Mat> cameraPoseList;
+	std::vector<cv::Mat> magicList;
 	
 	//!<get other calibration information
 	//first imu to velo
@@ -338,6 +419,9 @@ int main( int /*argc*/, char** /*argv*/ )
 	
 	
 
+	std::string dirOxts = "/home/zhao/Project/KITTI/2011_09_26/2011_09_26_drive_0002_sync/oxts/data/";
+	std::string dirRightImage = "/home/zhao/Project/KITTI/2011_09_26/2011_09_26_drive_0002_sync/image_03/data/";
+	std::string dirLeftImage = "/home/zhao/Project/KITTI/2011_09_26/2011_09_26_drive_0002_sync/image_02/data/";
 				
 				
 	//!<get camera position by translate velodyne position
@@ -376,20 +460,18 @@ int main( int /*argc*/, char** /*argv*/ )
 	double lat, lon, alt, roll, pitch, yaw, vn, ve, vf, vl, vu, ax, ay, az, af, al, au, wx, wy, wz, wf, wl, wu, pos_accuracy, vel_accuracy;
 	int navstat, numsats, posmode, velmode, orimode;
 	{
-		std::string dirname = "/home/zhao/Project/KITTI/2011_09_26/2011_09_26_drive_0002_sync/oxts/data/";
+		double mx0,my0,alt0;
 		struct dirent **namelist;
-		int fileNum = scandir(dirname.c_str(), &namelist, NULL, alphasort);
+		int fileNum = scandir(dirOxts.c_str(), &namelist, NULL, alphasort);
 		if(fileNum == -1) {
-			err(EXIT_FAILURE, "%s", dirname.c_str());
+			err(EXIT_FAILURE, "%s", dirOxts.c_str());
 		}
 		//(void) printf ("%d\n", fileNum);
-		
-		
-		
+	
 		cv::Mat H_imu0(4, 4, CV_64F);
 		for (int i = 2; i < fileNum; ++i) 
 		{
-			fstream input(dirname + namelist[i]->d_name, ios::in);
+			fstream input(dirOxts + namelist[i]->d_name, ios::in);
 			if(!input.good()){
 				cerr << "Could not read file: " << infile << endl;
 				exit(EXIT_FAILURE);
@@ -415,11 +497,21 @@ int main( int /*argc*/, char** /*argv*/ )
 			cv::Mat R_imu2imu0(3, 3, CV_64F);
 			cv::Mat T_imu2imu0(1, 3, CV_64F);
 			
-			T_imu2imu0.at<double>(0, 0) = mx;
-			T_imu2imu0.at<double>(0, 1) = my;
-			T_imu2imu0.at<double>(0, 2) = alt; //!< hight from the sea level? [m]
-			//std::cout<<translation<<endl;
+			if(i ==2)
+			{
+				mx0 = mx;
+				my0 = my;
+				alt0 = alt;
+			}
 			
+			//just for refine display, otherwise the pcl viewer sucks
+			T_imu2imu0.at<double>(0, 0) = mx -mx0;
+			T_imu2imu0.at<double>(0, 1) = my -my0;
+			T_imu2imu0.at<double>(0, 2) = alt -alt0; //!< hight from the sea level? [m]
+			//std::cout<<T_imu2imu0<<endl;
+			// T = << a, b, c;
+			
+			//std::cout<<T_imu2imu0<<endl;
 			
 			//!< rotation matrix (OXTS RT3000 user manual, page 71/92)
 			double rx = roll; // roll
@@ -452,6 +544,7 @@ int main( int /*argc*/, char** /*argv*/ )
 				cv::Mat H_cam0TOrectcam0(4, 4, CV_64F);
 				cv::Mat T_cam0TOrectcam0 = (cv::Mat_<double>(1,3) << 0, 0, 0);
 				RT2homogeneous(H_cam0TOrectcam0, R_cam0TOrectcam0, T_cam0TOrectcam0);
+				H_cam0TOrectcam0.at<double>(3, 3) = 1.00;
 				
 				cv::Mat H_imu2imu0(4, 4, CV_64F);
 				RT2homogeneous(H_imu2imu0, R_imu2imu0, T_imu2imu0);
@@ -461,17 +554,54 @@ int main( int /*argc*/, char** /*argv*/ )
 				}
 				
 				
+				cv::Mat H_imu02imu(4, 4, CV_64F);
+				
+				cv::Mat H_veloToCam2(4, 4, CV_64F);
+				cv::Mat H_Temp = cv::Mat::eye(4, 4, CV_64F);
+				H_Temp.at<double>(3, 3) = fb2 / focus;
+				H_veloToCam2 = H_Temp * H_cam0TOrectcam0 * H_velo2cam0;
+				
+				
+				//try eigen
+				/*Eigen::Map<Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>> A_Eigen(H_imu2imu0.ptr<double>(), H_imu2imu0.rows, H_imu2imu0.cols);
+				std::cout<<H_imu2imu0.inv()<<endl;
+				
+				//A_Eigen = A_Eigen.inverse();
+				//cv::Mat B_OpenCV(A_Eigen.rows(), A_Eigen.cols(), CV_64FC1, A_Eigen.data());
+				A_Eigen.transposeInPlace();
+				Eigen::Affine3d Tran(Eigen::Matrix4d::Map(A_Eigen.data()));
+				Tran = Tran.inverse( Eigen::Affine);
+				std::cout<<Tran.matrix()<<endl;
+				cv::Mat B_OpenCV(Tran.matrix().rows(), Tran.matrix().cols(), CV_64FC1, Tran.matrix().data());
+				//cv::eigen2cv(A_Eigen, H_imu02imu);
+				B_OpenCV = B_OpenCV.t();
+				std::cout<<B_OpenCV<<endl;*/
+				
+				
 				//<! now this matrix will trans ith frame's point(scanner frame) into world's frame(first frame's coordinate)
 				
-				cv::Mat  H_imu0TOrectcam2(4, 4, CV_64F);
-				//H_imu0TOrectcam2 = H_cam2TOrectcam2 * H_cam0grayTOcam2color * H_velo2cam0 * H_imu2velo * H_imu2imu0;
+				cv::Mat H_magic(4, 4, CV_64F);
+				//H_magic = H_cam2TOrectcam2 * H_cam0grayTOcam2color * H_velo2cam0 * H_imu2velo  * H_imu2imu0;
+				H_magic = H_veloToCam2 * H_imu2velo  * H_imu2imu0;
+				magicList.push_back(H_magic);
 				
-				//(H_imu0.inv() * H_imu2imu0) for normalize frame0's position to origin 
-				//if we do this, accurcy will descrace
-				H_imu0TOrectcam2 = H_cam2TOrectcam2 * H_cam0grayTOcam2color * H_velo2cam0 * H_imu2velo * (H_imu0.inv() * H_imu2imu0).inv();
-				//transformList.push_back(H_imu0TOrectcam2);
+				cv::Mat  H_imu0TOrectcam2(4, 4, CV_64F);
+				//H_imu0TOrectcam2 =   H_cam2TOrectcam2 * H_cam0grayTOcam2color * H_velo2cam0 * H_imu2velo  * H_imu2imu0;
+				//H_imu0TOrectcam2 = H_cam2TOrectcam2 * H_cam0grayTOcam2color * H_velo2cam0 * H_imu2velo  * H_imu2imu0;
+				//H_imu0TOrectcam2 = H_cam2TOrectcam2 * H_cam0grayTOcam2color * H_velo2cam0 * H_imu2velo  * ( H_imu0.inv() * H_imu2imu0  );
+				//std::cout<<H_imu0.inv() * H_imu2imu0<<endl;
+				
+
+				//H_imu0TOrectcam2 = H_cam2TOrectcam2 * H_cam0grayTOcam2color * H_velo2cam0 * H_imu2velo * H_imu2imu0.inv();
+				//H_imu0TOrectcam2 = H_cam2TOrectcam2 * H_cam0grayTOcam2color * H_velo2cam0 * H_imu2velo * (H_imu0.inv() * H_imu2imu0).inv();
+				H_imu0TOrectcam2 = H_veloToCam2 * H_imu2velo * (H_imu0.inv() * H_imu2imu0).inv();
+				
+				
+				//H_imu0TOrectcam2 = H_i2c * B_OpenCV;
 				
 				//std::cout<<H_cam2TOrectcam2 * H_cam0grayTOcam2color * H_velo2cam0 * H_imu2velo<<endl;
+				
+				
 				
 				homogeneous2RT(H_imu0TOrectcam2, R_imu0TOrectcam2, T_imu0TOrectcam2);
 				
@@ -480,7 +610,7 @@ int main( int /*argc*/, char** /*argv*/ )
 				
 				rotationList.push_back(R_imu0TOrectcam2);
 				translationList.push_back(T_imu0TOrectcam2);
-
+				
 			}
 			//T_imu0TOrectcam2 = T_imu2imu0 + T_imu2velo + T_velo2cam0 + T_cam0grayTOcam2color;
 			//R_imu0TOrectcam2 = R_cam2TOrectcam2 * R_cam0grayTOcam2color * R_velo2cam0 * R_imu2velo * R_imu2imu0;
@@ -504,54 +634,31 @@ int main( int /*argc*/, char** /*argv*/ )
 	
 	int fileNum;
 	//!<load images obtained by left color camera
-	{
-		std::string dirname = "/home/zhao/Project/KITTI/2011_09_26/2011_09_26_drive_0002_sync/image_02/data/";
-		struct dirent **namelist;
-		fileNum = scandir(dirname.c_str(), &namelist, NULL, alphasort);
-		if(fileNum == -1) {
-			err(EXIT_FAILURE, "%s", dirname.c_str());
-		}
-		//(void) printf ("%d\n", fileNum);
-		for (int i = 2; i < fileNum; ++i) 
-		{
-			//(void) printf("%s\n", namelist[i]->d_name);
-			
-			//std::cout<<dirname + namelist[i]->d_name<<std::endl;
-			cv::Mat pic = cv::imread(dirname + namelist[i]->d_name, 1);
-			LRefectedList.push_back(pic);
-			
-			free(namelist[i]);
-		}
-		free(namelist);
-	}
+	loadImageInKITTI(dirLeftImage, LRefectedList);
 	std::cout<<" left color images loaded. "<<endl;
 	
-	
 	//!<load images obtained by right color camera
-	{
-		std::string dirname = "/home/zhao/Project/KITTI/2011_09_26/2011_09_26_drive_0002_sync/image_03/data/";
-		struct dirent **namelist;
-		fileNum = scandir(dirname.c_str(), &namelist, NULL, alphasort);
-		if(fileNum == -1) {
-			err(EXIT_FAILURE, "%s", dirname.c_str());
-		}
-		//(void) printf ("%d\n", fileNum);
-		for (int i = 2; i < fileNum; ++i) 
-		{
-			//(void) printf("%s\n", namelist[i]->d_name);
-			
-			//std::cout<<dirname + namelist[i]->d_name<<std::endl;
-			cv::Mat pic = cv::imread(dirname + namelist[i]->d_name, 1);
-			RRefectedList.push_back(pic);
-			
-			free(namelist[i]);
-		}
-		free(namelist);
-	}
+	loadImageInKITTI(dirRightImage, RRefectedList);
 	std::cout<<" right color images loaded. "<<endl;
 	
-	//!< fix the file num since we don't want . and ..
-	fileNum = fileNum -2;
+	//!< get the fileNum
+	fileNum = LRefectedList.size();
+	
+	//!<estimate camera pose
+	estimateCameraPoseByViso2(focus, u0, v0, baseline, LRefectedList, RRefectedList, cameraPoseList);
+	rotationList.clear();
+	translationList.clear();
+	for (int i = 0; i <cameraPoseList.size(); i++)
+	{
+		cv::Mat T(1, 3, CV_64F);
+		cv::Mat R(3, 3, CV_64F);
+		cv::Mat H = cameraPoseList[i].inv();
+		
+		homogeneous2RT(H, R, T);
+		
+		rotationList.push_back(R);
+		translationList.push_back(T);
+	}
 	
 	//!< init variables
 	Elas::parameters param;
@@ -604,12 +711,9 @@ int main( int /*argc*/, char** /*argv*/ )
 		//maybe I can use some simple frame skip to instead it
 		static int framecnt = -1;
 		framecnt++;
-		fileNum = 10;
+		//fileNum = 10;
 		if (framecnt >= fileNum)
 			break;
-		//bool isKeyframe;
-		//if ( !isKeyframe )
-		//	continue;
 		
 		//*******************************************
 		//Dense stereo matching by ELAS
@@ -621,15 +725,11 @@ int main( int /*argc*/, char** /*argv*/ )
 		cv::Mat grayRightRefected;
 		cv::cvtColor(leftRefected,grayLeftRefected,CV_BGR2GRAY);
 		cv::cvtColor(rightRefected,grayRightRefected,CV_BGR2GRAY);
-		//grayLeftRefected.convertTo(grayLeftRefected,CV_8UC1);
-		//grayRightRefected.convertTo(grayRightRefected,CV_8UC1);
 		elas.process(grayLeftRefected.data, grayRightRefected.data, (float*)imageDisparity.data,(float*)imageDisparity.data, dims);
-		
 		
 		//!<Record disparity for each frame
 		disparityList.push_back(imageDisparity);
-		
-		
+
 		
 		//*******************************************
 		//claculate the Normalized zero mean and unit variance 
@@ -652,17 +752,11 @@ int main( int /*argc*/, char** /*argv*/ )
 			continue;
 		
 		currentFrameCloud.clear();
-
 		
 		//center of m stereo view is the keyframe
 		int keyFrame = framecnt - m + r;
 		std::cout<<" start keyframe at "<<keyFrame <<"."<<endl;
 		//cv::imshow( "D1",  disparityList[framecnt - m + 1] );
-		//cv::imshow( "D2",  disparityList[framecnt - m + 2] );
-		//cv::imshow( "D3",  disparityList[framecnt - m + 3] );
-		//cv::imshow( "L1",  LNormalizedList.at(framecnt -m + 1) );
-		//cv::imshow( "L2",  grayLeftRefected );
-		//cv::imshow( "L3",  LNormalizedList.at(framecnt -m + 3) );
 		//cv::waitKey(10);
 		
 		std::cout<<rotationList[keyFrame]<<endl;
@@ -695,9 +789,6 @@ int main( int /*argc*/, char** /*argv*/ )
 				cv::Mat Yi(1, 3, CV_64F);
 				//Yi = ( rotationList[keyFrame].inv() * hi.t() + translationList[keyFrame].t() ).t();
 				Yi = ( rotationList[keyFrame].inv() *  (hi.t() - translationList[keyFrame].t()) ).t();
-				//x = Yi.at<double>(0,0);
-				//y = Yi.at<double>(0,1);
-				//z = Yi.at<double>(0,2);
 				//std::cout<<Yi<<endl;
 				
 				
@@ -731,15 +822,15 @@ int main( int /*argc*/, char** /*argv*/ )
 				for (int k = 1; k <= m; k++)
 				{
 					int currentFrame = framecnt - m + k;
-					cv::Mat& rotation = rotationList.at(keyFrame);/////////////////////////////////////////////////////////currentFrame
-					cv::Mat& translation = translationList.at(keyFrame);/////////////////////////////////////////////////////////currentFrame
-					cv::Mat& disparity = disparityList.at(keyFrame);/////////////////////////////////////////////////////////currentFrame
+					cv::Mat& rotation = rotationList.at(currentFrame);/////////////////////////////////////////////////////////currentFrame
+					cv::Mat& translation = translationList.at(currentFrame);/////////////////////////////////////////////////////////currentFrame
+					cv::Mat& disparity = disparityList.at(currentFrame);/////////////////////////////////////////////////////////currentFrame
 					
 					
 					//'Yi' will be project on current frame's 'Ui' pixel
 					cv::Mat Ui = cv::Mat::zeros(1, 3, CV_64F);
 					//Ui = K * (rotation * (Yi - translation).t() );
-					Ui = K * (rotationList[keyFrame] * Yi.t() + translationList[keyFrame].t());
+					Ui = K * (rotation * Yi.t() + translation.t());
 					Ui = Ui / Ui.at<double>(0,2);
 					
 					//Now we got the pixel's position, let's check the disparity
@@ -791,14 +882,21 @@ int main( int /*argc*/, char** /*argv*/ )
 					float x = z * (j - u0) / focus;
 					float y = z * (i - v0) / focus;
 					cv::Mat Yk(1, 3, CV_64F);
-					//Yk.at<double>(0,0) = -y;
-					//Yk.at<double>(0,1) = -z;
-					//Yk.at<double>(0,2) = x;
+					Yk.at<double>(0,0) = -y;
+					Yk.at<double>(0,1) = -z;
+					Yk.at<double>(0,2) = x;
+					//Yk = ( rotation.inv() * Yk.t() + translation.t() ).t();
+					
+					//cv::Mat magicRotation(3, 3, CV_64F);
+					//cv::Mat magicTranslation(1, 3, CV_64F);
+					//homogeneous2RT(magicList[currentFrame], magicRotation, magicTranslation);
+					//Yk = ( magicRotation.inv() * Yk.t() + magicTranslation.t() ).t();
+					
+					
 					Yk.at<double>(0,0) = x;
 					Yk.at<double>(0,1) = y;
 					Yk.at<double>(0,2) = z;
-					//Yk = ( rotationList[keyFrame].inv() * Yk.t() + translationList[keyFrame].t() ).t();/////////////////////////////////////////////////////////currentFrame
-					Yk = ( rotationList[keyFrame].inv() *  (Yk.t() - translationList[keyFrame].t()) ).t();
+					Yk = ( rotation.inv() *  (Yk.t() - translation.t()) ).t();
 					YiList.push_back(Yk);//save current point's position under current frame
 				}
 				
@@ -833,26 +931,38 @@ int main( int /*argc*/, char** /*argv*/ )
 				std::vector<cv::Vec3b> colorList;
 				float gp = 0;
 				bool flgPhotometricCheckPassed = true;
-				/*for (int k = 1; k <= m; k++)
+				for (int k = 1; k <= m; k++)
 				{
 					int currentFrame = framecnt - m + k;
-					cv::Mat curPixel;
+					cv::Mat keyPixel;
 					cv::Mat tarPixel;
 				
 				
 					//calculate 2D position in current neighbor frame
-					cv::Mat& rotation = rotationList.at(keyFrame);/////////////////////////////////////////////////////////currentFrame
-					cv::Mat& translation = translationList.at(keyFrame);/////////////////////////////////////////////////////////currentFrame
+					cv::Mat& rotation = rotationList.at(currentFrame);/////////////////////////////////////////////////////////currentFrame
+					cv::Mat& translation = translationList.at(currentFrame);/////////////////////////////////////////////////////////currentFrame
 					
 					cv::Mat Ui(1, 3, CV_64F);
-					Ui = K * (rotation * (Yi + translation).t() );
+					//Ui = K * (rotation * (Yi - translation).t() );
+					Ui = K * (rotation * Yi.t() + translation.t() );
 					Ui = Ui / Ui.at<double>(0,2);
 					tarPixel = Ui;
 					
 					//save pixel value in target frame
 					float u = tarPixel.at<double>(0, 0);
 					float v = tarPixel.at<double>(0, 1);
-					cv::Vec3b bgr = LRefectedList[keyFrame].at<cv::Vec3b>(v,u);/////////////////////////////////////////////////////////currentFrame
+					
+					/*cv::Mat magicRotation(3, 3, CV_64F);
+					cv::Mat magicTranslation(1, 3, CV_64F);
+					homogeneous2RT(magicList[currentFrame], magicRotation, magicTranslation);
+					Ui = K * (rotation * (Yi - translation).t() );
+					Ui = Ui / Ui.at<double>(0,2);
+					u = Ui.at<double>(0, 0);
+					v = Ui.at<double>(0, 1);*/
+					
+					
+					
+					cv::Vec3b bgr = LRefectedList[currentFrame].at<cv::Vec3b>(v,u);/////////////////////////////////////////////////////////currentFrame
 					colorList.push_back(bgr);
 					if (u - patchSize/2 <0 || u + patchSize/2>1242 || v - patchSize/2 <0 || v + patchSize/2> 375 ||isnan(u) ||isnan(v))
 					{
@@ -865,18 +975,19 @@ int main( int /*argc*/, char** /*argv*/ )
 					cv::Mat& _rotation = rotationList.at(keyFrame);
 					cv::Mat& _translation = translationList.at(keyFrame);
 					
-					Ui = K * (_rotation * (Yi + _translation).t() );
+					//Ui = K * (_rotation * (Yi - _translation).t() );
+					Ui = K * (_rotation * Yi.t() + _translation.t() );
 					Ui = Ui / Ui.at<double>(0,2);
-					curPixel = Ui;
-					u = curPixel.at<double>(0, 0);
-					v = curPixel.at<double>(0, 1);
+					keyPixel = Ui;
+					u = keyPixel.at<double>(0, 0);
+					v = keyPixel.at<double>(0, 1);
 					if (u - patchSize/2 <0 || u + patchSize/2>1242 || v - patchSize/2 <0 || v + patchSize/2> 375 ||isnan(u) ||isnan(v))
 					{
 						flgPhotometricCheckPassed = false;
 						break;
 					}
 				
-					float NCCScore = NCC(LNormalizedList.at(keyFrame), LNormalizedList.at(keyFrame), curPixel, tarPixel, patchSize);/////////////////////////////////////////////////////////currentFrame
+					float NCCScore = NCC(LNormalizedList.at(keyFrame), LNormalizedList.at(currentFrame), keyPixel, tarPixel, patchSize);/////////////////////////////////////////////////////////currentFrame
 					gp = gp + NCCScore;
 					
 				}
@@ -884,7 +995,7 @@ int main( int /*argc*/, char** /*argv*/ )
 					continue;
 				gp = gp / 3;
 				if (gp > Tphoto)
-					continue;*/
+					continue;
 				
 				
 				//<!if the pixel passed the both test, fuse it in to point cloud
@@ -904,9 +1015,9 @@ int main( int /*argc*/, char** /*argv*/ )
 					point.z += YiList[i].at<double>(0, 2) * weightList[i];
 					weightSum = weightSum + weightList[i];
 					
-					//pb = colorList[i].val[0] * weightList[i];
-					//pg = colorList[i].val[1] * weightList[i];
-					//pr = colorList[i].val[2] * weightList[i];
+					pb = colorList[i].val[0] * weightList[i];
+					pg = colorList[i].val[1] * weightList[i];
+					pr = colorList[i].val[2] * weightList[i];
 					
 				}
 				point.x = point.x / weightSum;

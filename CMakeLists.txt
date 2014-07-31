@@ -10,9 +10,10 @@ set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -msse3 -pg -std=c++11 -W
 
 
 add_subdirectory( elas )
+add_subdirectory( viso2 )
 add_subdirectory( LSD3DR_main )
 
-add_executable( ${PROJECT_NAME} $<TARGET_OBJECTS:elas> $<TARGET_OBJECTS:LSD3DR_main>)
+add_executable( ${PROJECT_NAME} $<TARGET_OBJECTS:elas> $<TARGET_OBJECTS:viso2> $<TARGET_OBJECTS:LSD3DR_main>)
 
 
 

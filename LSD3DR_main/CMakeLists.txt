@@ -16,6 +16,9 @@ add_library ( LSD3DR_main OBJECT ${PROJECT_SOURCE_DIR}/main.cpp )
 # ELAS
 include_directories( ${CMAKE_SOURCE_DIR}/elas/include )
 
+# VISO2
+include_directories( ${CMAKE_SOURCE_DIR}/viso2/src )
+
 
 # build-in packages
 
