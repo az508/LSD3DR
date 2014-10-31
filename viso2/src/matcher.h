@@ -51,6 +51,9 @@ public:
     int32_t half_resolution;        // 0=disabled,1=match at half resolution, refine at full resolution
     int32_t refinement;             // refinement (0=none,1=pixel,2=subpixel)
     double  f,cu,cv,base;           // calibration (only for match prediction)
+    double  center_shift;
+	double cu1, cv1;
+	//Matrix TransLeftToRight;		// homogenerous matrix tranlate point from left camera's coordinate to right camera's 
     
     // default settings
     parameters () {
@@ -64,6 +67,7 @@ public:
       multi_stage            = 1;
       half_resolution        = 1;
       refinement             = 1;
+	  center_shift           = 0;
     }
   };
 
@@ -79,6 +83,26 @@ public:
     param.cu = cu;
     param.cv = cv;
     param.base = base;
+  }
+  
+   void setExtraParamater(double center_shift, double cu1, double cv1)
+  {
+	  param.center_shift = center_shift;
+	  param.cu1 = cu1;
+	  param.cv1 = cv1;
+  }
+  
+  void setTransformAfterRecifty(std::vector<double>& TransformAfterRecifty)
+  {
+	T00 = TransformAfterRecifty[0], T01 = TransformAfterRecifty[1], T02 = TransformAfterRecifty[2], T03 = TransformAfterRecifty[3],
+	T10 = TransformAfterRecifty[4], T11 = TransformAfterRecifty[5], T12 = TransformAfterRecifty[6], T13 = TransformAfterRecifty[7],
+	T20 = TransformAfterRecifty[8], T21 = TransformAfterRecifty[9], T22 = TransformAfterRecifty[10], T23 = TransformAfterRecifty[11],
+	T30 = TransformAfterRecifty[12], T31 = TransformAfterRecifty[13], T32 = TransformAfterRecifty[14], T33 = TransformAfterRecifty[15];
+	
+// 			T00 = 0.9998, T01 = -0.0000123, T02 = -0.0198, T03 = -41.7890,
+// 			T10 = 0.00006996, T11 = 0.9999, T12 = 0.00291, T13 = -0.00204,
+// 			T20 = 0.0198, T21 = -0.00291, T22 = 0.998, T23 = -0.06416,
+// 			T30 = 0, T31 = 0, T32 = 0, T33 = 1;
   }
 
   // structure for storing matches
@@ -242,6 +266,11 @@ private:
   std::vector<Matcher::p_match> p_matched_1;
   std::vector<Matcher::p_match> p_matched_2;
   std::vector<Matcher::range>   ranges;
+  
+	double 	T00 , T01 , T02 , T03 ,
+			T10 , T11 , T12 , T13 ,
+			T20 , T21 , T22 , T23 ,
+			T30 , T31 , T32 , T33 ;
 };
 
 #endif

@@ -27,7 +27,7 @@ if(EIGEN3_FOUND)
   include_directories(${EIGEN3_INCLUDE_DIR})
 endif()
 
-find_package(Boost 1.47 COMPONENTS system )
+find_package(Boost 1.47 COMPONENTS system thread)
 if(Boost_FOUND)
   include_directories(${Boost_INCLUDE_DIRS})
 endif()

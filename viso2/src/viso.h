@@ -34,6 +34,7 @@ public:
     double f;  // focal length (in pixels)
     double cu; // principal point (u-coordinate)
     double cv; // principal point (v-coordinate)
+	
     calibration () {
       f  = 1;
       cu = 0;

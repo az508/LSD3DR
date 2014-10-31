@@ -25,6 +25,7 @@ using namespace std;
 
 VisualOdometryStereo::VisualOdometryStereo (parameters param) : param(param), VisualOdometry(param) {
   matcher->setIntrinsics(param.calib.f,param.calib.cu,param.calib.cv,param.base);
+  matcher->setExtraParamater(param.center_shift, param.cu1, param.cv1);
 }
 
 VisualOdometryStereo::~VisualOdometryStereo() {
@@ -68,7 +69,8 @@ vector<double> VisualOdometryStereo::estimateMotion (vector<Matcher::p_match> p_
 
   // project matches of previous image into 3d
   for (int32_t i=0; i<N; i++) {
-    double d = max(p_matched[i].u1p - p_matched[i].u2p,0.0001f);
+    //double d = max(p_matched[i].u1p - p_matched[i].u2p,0.0001f);
+	double d = max(p_matched[i].u1p - p_matched[i].u2p + (float)param.center_shift,0.0001f);
     X[i] = (p_matched[i].u1p-param.calib.cu)*param.base/d;
     Y[i] = (p_matched[i].v1p-param.calib.cv)*param.base/d;
     Z[i] = param.calib.f*param.base/d;
@@ -236,19 +238,24 @@ void VisualOdometryStereo::computeResidualsAndJacobian(vector<double> &tr,vector
   double r00    = +cy*cz;          double r01    = -cy*sz;          double r02    = +sy;
   double r10    = +sx*sy*cz+cx*sz; double r11    = -sx*sy*sz+cx*cz; double r12    = -sx*cy;
   double r20    = -cx*sy*cz+sx*sz; double r21    = +cx*sy*sz+sx*cz; double r22    = +cx*cy;
+  
+  
   double rdrx10 = +cx*sy*cz-sx*sz; double rdrx11 = -cx*sy*sz-sx*cz; double rdrx12 = -cx*cy;
   double rdrx20 = +sx*sy*cz+cx*sz; double rdrx21 = -sx*sy*sz+cx*cz; double rdrx22 = -sx*cy;
+  
   double rdry00 = -sy*cz;          double rdry01 = +sy*sz;          double rdry02 = +cy;
   double rdry10 = +sx*cy*cz;       double rdry11 = -sx*cy*sz;       double rdry12 = +sx*sy;
   double rdry20 = -cx*cy*cz;       double rdry21 = +cx*cy*sz;       double rdry22 = -cx*sy;
+  
   double rdrz00 = -cy*sz;          double rdrz01 = -cy*cz;
   double rdrz10 = -sx*sy*sz+cx*cz; double rdrz11 = -sx*sy*cz-cx*sz;
   double rdrz20 = +cx*sy*sz+sx*cz; double rdrz21 = +cx*sy*cz-sx*sz;
 
   // loop variables
   double X1p,Y1p,Z1p;
-  double X1c,Y1c,Z1c,X2c;
+  double X1c,Y1c,Z1c,X2c,Y2c,Z2c;
   double X1cd,Y1cd,Z1cd;
+  double X2cd,Y2cd,Z2cd;
 
   // for all observations do
   for (int32_t i=0; i<(int32_t)active.size(); i++) {
@@ -270,6 +277,13 @@ void VisualOdometryStereo::computeResidualsAndJacobian(vector<double> &tr,vector
     
     // compute 3d point in current right coordinate system
     X2c = X1c-param.base;
+	//double 	T00 = 0.9998, T01 = -0.0000123, T02 = -0.0198, T03 = -41.7890,
+	//		T10 = 0.00006996, T11 = 0.9999, T12 = 0.00291, T13 = -0.00204,
+	//		T20 = 0.0198, T21 = -0.00291, T22 = 0.998, T23 = -0.06416,
+	//		T30 = 0, T31 = 0, T32 = 0, T33 = 1;
+	//X2c = T00*X1c + T01*Y1c + T02*Z1c + T03*1;
+    //Y2c = T10*X1c + T11*Y1c + T12*Z1c + T13*1;
+    //Z2c = T20*X1c + T21*Y1c + T22*Z1c + T23*1;
 
     // for all paramters do
     for (int32_t j=0; j<6; j++) {
@@ -298,13 +312,17 @@ void VisualOdometryStereo::computeResidualsAndJacobian(vector<double> &tr,vector
       J[(4*i+1)*6+j] = weight*param.calib.f*(Y1cd*Z1c-Y1c*Z1cd)/(Z1c*Z1c); // left v'
       J[(4*i+2)*6+j] = weight*param.calib.f*(X1cd*Z1c-X2c*Z1cd)/(Z1c*Z1c); // right u'
       J[(4*i+3)*6+j] = weight*param.calib.f*(Y1cd*Z1c-Y1c*Z1cd)/(Z1c*Z1c); // right v'
+      //J[(4*i+2)*6+j] = weight*param.calib.f*(X1cd*Z2c-X2c*Z1cd)/(Z2c*Z2c); // right u'
+      //J[(4*i+3)*6+j] = weight*param.calib.f*(Y1cd*Z2c-Y2c*Z1cd)/(Z2c*Z2c); // right v'
     }
 
     // set prediction (project via K)
     p_predict[4*i+0] = param.calib.f*X1c/Z1c+param.calib.cu; // left u
     p_predict[4*i+1] = param.calib.f*Y1c/Z1c+param.calib.cv; // left v
-    p_predict[4*i+2] = param.calib.f*X2c/Z1c+param.calib.cu; // right u
-    p_predict[4*i+3] = param.calib.f*Y1c/Z1c+param.calib.cv; // right v
+    p_predict[4*i+2] = param.calib.f*X2c/Z1c+param.cu1; // right u
+    p_predict[4*i+3] = param.calib.f*Y1c/Z1c+param.cv1; // right v
+    //p_predict[4*i+2] = param.calib.f*X2c/Z2c+param.cu1; // right u
+    //p_predict[4*i+3] = param.calib.f*Y2c/Z2c+param.cv1; // right v
     
     // set residuals
     p_residual[4*i+0] = weight*(p_observe[4*i+0]-p_predict[4*i+0]);

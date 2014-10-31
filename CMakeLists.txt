@@ -5,8 +5,8 @@ project( LSD3DR )
 set( CMAKE_VERBOSE_MAKEFILE 1) # to see all make process
 
 
-set(CMAKE_CXX_FLAGS_DEBUG   "${CMAKE_CXX_FLAGS_DEBUG}   -msse3 -pg -std=c++11 -Wall -g -O0 ")
-set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -msse3 -pg -std=c++11 -Wall -O3    ")
+set(CMAKE_CXX_FLAGS_DEBUG   "${CMAKE_CXX_FLAGS_DEBUG}   -msse3 -pg  -std=c++11 -Wall -g -O0 ")
+set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -msse3 -pg  -std=c++11 -Wall -O3    ")
 
 
 add_subdirectory( elas )
@@ -25,7 +25,7 @@ if(EIGEN3_FOUND)
   include_directories(${EIGEN3_INCLUDE_DIR})
 endif()
 
-find_package(Boost 1.47 COMPONENTS system )
+find_package(Boost 1.47 COMPONENTS system thread )
 if(Boost_FOUND)
   include_directories(${Boost_INCLUDE_DIRS})
   target_link_libraries( ${PROJECT_NAME} ${Boost_LIBRARIES})

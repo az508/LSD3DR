@@ -22,6 +22,7 @@ Street, Fifth Floor, Boston, MA 02110-1301, USA
 #include "matcher.h"
 #include "../../elas/include/triangle.h"
 #include "../../elas/include/filter.h"
+//#define DEBUG
 
 using namespace std;
 
@@ -178,6 +179,28 @@ void Matcher::pushBack (uint8_t *I1,uint8_t* I2,int32_t* dims,const bool replace
   computeFeatures(I1c,dims_c,m1c1,n1c1,m1c2,n1c2,I1c_du,I1c_dv,I1c_du_full,I1c_dv_full);
   if (I2!=0)
     computeFeatures(I2c,dims_c,m2c1,n2c1,m2c2,n2c2,I2c_du,I2c_dv,I2c_du_full,I2c_dv_full);
+  
+#ifdef DEBUG
+  int32_t k=0;
+  int32_t* max1 = m1c2;
+    for (int i = 0; i < n1c2; i++) {
+		int u = *(max1 + k);
+		k++;
+		int v = *(max1 + k);
+		k = k + 11;
+		I1[u + v * width] = 255;
+    }
+    
+  k=0;
+  int32_t* max2 = m2c2;
+    for (int i = 0; i < n2c2; i++) {
+		int u = *(max2 + k);
+		k++;
+		int v = *(max2 + k);
+		k = k + 11;
+		I2[u + v * width] = 255;
+    }
+#endif
 }
 
 void Matcher::matchFeatures(int32_t method, Matrix *Tr_delta) {
@@ -703,6 +726,9 @@ void Matcher::computeFeatures (uint8_t *I,const int32_t* dims,int32_t* &max1,int
   num2 = maxima2.size();
   max1 = 0;
   max2 = 0;
+#ifdef DEBUG
+  cout<<"Exarted sparse/dense features: "<<num1<<"  "<<num2<<endl;
+#endif
   
   int32_t s = 1;
   if (param.half_resolution)
@@ -1093,6 +1119,11 @@ void Matcher::matching (int32_t *m1p,int32_t *m2p,int32_t *m1c,int32_t *m2c,
     createIndexVector(m2p,n2p,k2p,u_bin_num,v_bin_num);
     createIndexVector(m1c,n1c,k1c,u_bin_num,v_bin_num);
     createIndexVector(m2c,n2c,k2c,u_bin_num,v_bin_num);
+	
+	//double 	T00 = 0.9998, T01 = -0.0000123, T02 = -0.0198, T03 = -41.7890,
+	//		T10 = 0.00006996, T11 = 0.9999, T12 = 0.00291, T13 = -0.00204,
+	//		T20 = 0.0198, T21 = -0.00291, T22 = 0.998, T23 = -0.06416,
+	//		T30 = 0, T31 = 0, T32 = 0, T33 = 1;
     
     // for all points do
     for (i1p=0; i1p<n1p; i1p++) {
@@ -1114,17 +1145,30 @@ void Matcher::matching (int32_t *m1p,int32_t *m2p,int32_t *m1c,int32_t *m2c,
 
       if (Tr_delta) {
       
-        double d = max((double)u1p-(double)u2p,1.0);
+        //double d = max((double)u1p-(double)u2p,1.0);
+		double d = max((double)u1p-(double)u2p + param.center_shift,1.0);
         double x1p = ((double)u1p-param.cu)*param.base/d;
         double y1p = ((double)v1p-param.cv)*param.base/d;
         double z1p = param.f*param.base/d;
 
-        double x2c = t00*x1p + t01*y1p + t02*z1p + t03 - param.base;
-        double y2c = t10*x1p + t11*y1p + t12*z1p + t13;
-        double z2c = t20*x1p + t21*y1p + t22*z1p + t23;
+        //double x2c = t00*x1p + t01*y1p + t02*z1p + t03 + param.base;//so this may need to change, too
+        //double y2c = t10*x1p + t11*y1p + t12*z1p + t13;
+        //double z2c = t20*x1p + t21*y1p + t22*z1p + t23;
+		
+		double x1c = t00*x1p + t01*y1p + t02*z1p + t03;
+        double y1c = t10*x1p + t11*y1p + t12*z1p + t13;
+        double z1c = t20*x1p + t21*y1p + t22*z1p + t23;
+		
+		double x2c = T00*x1c + T01*y1c + T02*z1c + T03*1;
+        double y2c = T10*x1c + T11*y1c + T12*z1c + T13*1;
+        double z2c = T20*x1c + T21*y1c + T22*z1c + T23*1;
+		
+		//double x2c = x1c + param.base;
+        //double y2c = y1c;
+        //double z2c = z1c;
 
-        double u2c_ = param.f*x2c/z2c+param.cu;
-        double v2c_ = param.f*y2c/z2c+param.cv;
+        double u2c_ = param.f*x2c/z2c+param.cu1;
+        double v2c_ = param.f*y2c/z2c+param.cv1;
 
         findMatch(m2p,i2p,m2c,step_size,k2c,u_bin_num,v_bin_num,stat_bin,i2c, 1,true ,use_prior,u2c_,v2c_);
       } else {
@@ -1206,7 +1250,10 @@ void Matcher::matching (int32_t *m1p,int32_t *m2p,int32_t *m1c,int32_t *m2c,
 }
 
 void Matcher::removeOutliers (vector<Matcher::p_match> &p_matched,int32_t method) {
-  
+#ifdef DEBUG
+	cout<<"matching number before outlier remove:"<<p_matched.size()<<endl;
+#endif
+	
   // do we have enough points for outlier removal?
   if (p_matched.size()<=3)
     return;
@@ -1375,6 +1422,9 @@ void Matcher::removeOutliers (vector<Matcher::p_match> &p_matched,int32_t method
   free(in.pointlist);
   free(out.pointlist);
   free(out.trianglelist);
+#ifdef DEBUG
+  	cout<<"matching number after outlier remove:"<<p_matched.size()<<endl;
+#endif
 }
 
 bool Matcher::parabolicFitting(const uint8_t* I1_du,const uint8_t* I1_dv,const int32_t* dims1,
