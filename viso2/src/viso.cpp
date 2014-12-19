@@ -44,10 +44,103 @@ bool VisualOdometry::updateMotion () {
   // estimate motion
   vector<double> tr_delta = estimateMotion(p_matched);
   
-  // on failure
-  if (tr_delta.size()!=6)
+  bool static firstTime = true;
+  // on failure && not first time
+  if (tr_delta.size()!=6 && !firstTime)
     return false;
   
+  if(firstTime)
+  {
+	  firstTime = false;
+	  for (int i = 0; i < 6; i++)
+	  {
+		  tr_delta.push_back(0);
+	  }
+  }
+  
+  
+  //////////////////////
+  // kalman filtering 
+  // deltaT: time passed
+  //////////////////////
+  /*
+  float deltaT = 1;
+  bool success = true;
+  
+  // measurement
+  if (success) KF_z = Matrix(6,1,tr_delta.data())/deltaT;
+  else         KF_z = Matrix(6,1);
+ 
+  // state transition matrix
+  KF_A = Matrix::eye(12);
+  for (int i = 0; i<12; i++)
+  {
+	  KF_A.val[i][i] = 0;
+  }
+//   for (int32_t i=0; i<6; i++)
+//     KF_A.val[i][i+6] = deltaT;
+ 
+  // observation matrix
+  KF_H = Matrix(6,12);
+  for (int32_t i=0; i<6; i++)
+    KF_H.val[i][i] = 1;
+
+  // process noise
+  KF_Q = Matrix::eye(12);
+  KF_Q.setDiag(1e-9,0,2);
+  KF_Q.setDiag(1e-8,3,5);
+  KF_Q.setDiag(1e-0,6,8);
+  KF_Q.setDiag(1e-0,9,11);
+
+  // measurement noise
+  KF_R = Matrix::eye(6);
+  KF_R.setDiag(1e-2,0,2);
+  KF_R.setDiag(1e-1,3,5);
+//   KF_R.setDiag(1e6,0,2);
+//   KF_R.setDiag(1e5,3,5);
+ 
+  // do not rely on measurements if estimation went wrong
+  if (!success)
+    KF_R = KF_R*1e6;
+
+  // first iteration
+  if (KF_x.m==0) {
+
+    // init state x and state covariance P
+    KF_x = Matrix(12,1);
+    KF_x.setMat(KF_z,0,0);
+    KF_P = Matrix::eye(12);
+
+  // other iterations
+  } else {
+
+    // prediction
+    KF_x = KF_A*KF_x;
+    KF_P = KF_A*KF_P*(~KF_A)+KF_Q;
+// for(int i = 0; i <12; i++)
+// {
+// 	cout<<KF_x.val[i][0]<<" ";
+// }
+// cout<<endl;
+
+    // kalman gain
+    Matrix K = KF_P*(~KF_H)*Matrix::inv(KF_H*KF_P*(~KF_H)+KF_R);
+
+    // correction
+    KF_x = KF_x + K*(KF_z-KF_H*KF_x);
+    KF_P = KF_P - K*KF_H*KF_P;
+  }
+// for(int i = 0; i <12; i++)
+// {
+// 	cout<<KF_x.val[i][0]<<" ";
+// }
+// cout<<endl;
+  // re-set parameter vectorx2c
+//cout<<tr_delta[0]<<" "<<tr_delta[1]<<" "<<tr_delta[2]<<" "<<tr_delta[3]<<" "<<tr_delta[4]<<" "<<tr_delta[5]<<" "<<endl;
+//  (KF_x*deltaT).getData(tr_delta.data(),0,0,5,0);
+//cout<<tr_delta[3]<<" "<<tr_delta[4]<<" "<<tr_delta[5]<<" "<<endl;
+  
+  */
   // set transformation matrix (previous to current frame)
   Tr_delta = transformationVectorToMatrix(tr_delta);
   Tr_valid = true;

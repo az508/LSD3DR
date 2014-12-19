@@ -39,7 +39,7 @@ public:
 	double cv1;
     parameters () {
       base             = 1.0;
-      ransac_iters     = 200;
+      ransac_iters     = 300;
       inlier_threshold = 2.0;
       reweighting      = true;
 	  center_shift     = 0.0;
@@ -80,10 +80,10 @@ public:
 	
 	matcher->setTransformAfterRecifty( TransformAfterRecifty );
 	
-// 			T00 = 0.9998, T01 = -0.0000123, T02 = -0.0198, T03 = -41.7890,
-// 			T10 = 0.00006996, T11 = 0.9999, T12 = 0.00291, T13 = -0.00204,
-// 			T20 = 0.0198, T21 = -0.00291, T22 = 0.998, T23 = -0.06416,
-// 			T30 = 0, T31 = 0, T32 = 0, T33 = 1;
+			T00 = 1, T01 = 0, T02 = 0, T03 = -41.7890,
+			T10 = 0, T11 = 1, T12 = 0, T13 = 0,
+			T20 = 0, T21 = 0, T22 = 1, T23 = 0,
+			T30 = 0, T31 = 0, T32 = 0, T33 = 1;
   }
 
 private:

@@ -27,13 +27,40 @@
 #include <Eigen/LU> 
 
 //#define USE_KITTI
-#define MT_VIEWER
+//#define MT_VIEWER
+#define RECORD_TIME
 
 bool update;
 boost::mutex updateModelMutex;
 pcl::PointCloud<pcl::PointXYZRGB> globalCloud;
 int totalFileNum, currentFileNum;
 
+class Timer
+{
+public:
+    Timer() {timeElapsed = 0; }
+    
+    //start a new record
+    void start() { clock_gettime(CLOCK_REALTIME, &beg_); timeElapsed = 0; }
+    
+    //save elapsed time and pause time record
+    void pause()
+	{
+		clock_gettime(CLOCK_REALTIME, &end_);
+		timeElapsed += end_.tv_sec - beg_.tv_sec + (end_.tv_nsec - beg_.tv_nsec) / 1000000000.;
+	}
+	
+	//continue to record the time
+	void continue_()
+	{
+		clock_gettime(CLOCK_REALTIME, &beg_);
+	}
+
+	double getElapsed() { return timeElapsed; }
+private:
+    timespec beg_, end_;
+	double timeElapsed;
+};
 
 void visualize()  
 {  
@@ -312,10 +339,7 @@ void loadCalibrationOpencv(float& baseline, float& focus, float& u0, float& v0, 
 	
 	baseline = fabs ( 1 / Q.at<double>(3,2) );
 	centerShift = Q.at<double>(3,3) * baseline; //center right - center left
-#ifndef USE_KITTI
-	//baseline = baseline / 100;//change cm to m
-	//baseline = baseline * 2.3;
-#endif
+
 	focus = Q.at<double>(2,3);
 	u0 = -Q.at<double>(0,3);
 	v0 = -Q.at<double>(1,3);
@@ -364,6 +388,8 @@ void loadImageFromFile( std::string& dirName, std::vector<cv::Mat>& outputVector
 		if(fileNum == -1) {
 			err(EXIT_FAILURE, "%s", dirName.c_str());
 		}
+		
+		//fileNum = 3+2;
 		//(void) printf ("%d\n", fileNum);
 		for (int i = 2; i < fileNum; ++i) 
 		{
@@ -422,13 +448,13 @@ void estimateCameraPoseByViso2 (int imgWidth, int imgHeight, float focus, float 
 			// output some statistics
 			double num_matches = viso.getNumberOfMatches();
 			double num_inliers = viso.getNumberOfInliers();
-// 			cout << "Frame: " << i;
-// 			cout << ", Matches: " << num_matches;
-// 			cout << ", Inliers: " << 100.0*num_inliers/num_matches << " %" << ", Current pose: " << endl;
-// 			cout << pose << endl << endl;
+//  			cout << "Frame: " << i;
+//  			cout << ", Matches: " << num_matches;
+//  			cout << ", Inliers: " << 100.0*num_inliers/num_matches << " %" << ", Current pose: " << endl;
+//  			cout << pose << endl << endl;
 			
 			//cout << "# " << pose.val[0][3] <<" "<<pose.val[1][3]<<" "<<pose.val[2][3] << endl;
-			cout << pose.val[0][3] <<" "<<pose.val[1][3]<<" "<<pose.val[2][3] << endl;
+			cout << pose.val[0][3] <<" "<<pose.val[1][3]<<" "<<pose.val[2][3] <<" "<<num_matches<<" "<<num_inliers<< endl;
 			
 			
 			cv::Mat H = (cv::Mat_<double>(4,4) << pose.val[0][0], pose.val[0][1], pose.val[0][2], pose.val[0][3], 
@@ -460,9 +486,9 @@ int main( int argc, char** argv )
 	std::vector<cv::Mat> cameraPoseList;
 	std::vector<cv::Mat> magicList;
 
-	std::string dirOxts = "/home/zhao/Project/KITTI/2011_09_26/2011_09_26_drive_0048_sync/oxts/data/";
-	std::string dirRightImage = "/home/zhao/Project/KITTI/2011_09_26/2011_09_26_drive_0048_sync/image_03/data/";
-	std::string dirLeftImage = "/home/zhao/Project/KITTI/2011_09_26/2011_09_26_drive_0048_sync/image_02/data/";
+	std::string dirOxts = "/home/zhao/Project/KITTI/2011_09_26/2011_09_26_drive_0027_sync/oxts/data/";
+	std::string dirRightImage = "/home/zhao/Project/KITTI/2011_09_26/2011_09_26_drive_0027_sync/image_03/data/";
+	std::string dirLeftImage = "/home/zhao/Project/KITTI/2011_09_26/2011_09_26_drive_0027_sync/image_02/data/";
 	
 	
 #ifndef USE_KITTI
@@ -485,6 +511,7 @@ int main( int argc, char** argv )
     //and image pairs. Init variables.
     //*******************************************
 	float centerShift = 0;
+	std::vector<double> TransformAfterRecifty;
 #ifdef USE_KITTI
     std::string infile = "/home/zhao/Project/KITTI/2011_09_26/calib_cam_to_cam.txt" ;
     
@@ -566,10 +593,14 @@ int main( int argc, char** argv )
 	}
 	std::cout<<" calib_velo_to_cam.txt loaded. "<<endl;
 	//std::cout<<" R_velo2cam0: "<<endl<<R_velo2cam0<<endl;
+	
+	TransformAfterRecifty.push_back(1); TransformAfterRecifty.push_back(0); TransformAfterRecifty.push_back(0); TransformAfterRecifty.push_back(-baseline);
+	TransformAfterRecifty.push_back(0); TransformAfterRecifty.push_back(1); TransformAfterRecifty.push_back(0); TransformAfterRecifty.push_back(0);
+	TransformAfterRecifty.push_back(0); TransformAfterRecifty.push_back(0); TransformAfterRecifty.push_back(1); TransformAfterRecifty.push_back(0);
+	TransformAfterRecifty.push_back(0); TransformAfterRecifty.push_back(0); TransformAfterRecifty.push_back(0); TransformAfterRecifty.push_back(1);
 #else
 	
 	cv::Mat mx1, mx2, my1, my2;
-	std::vector<double> TransformAfterRecifty;
 	loadCalibrationOpencv( baseline, focus, u0, v0, centerShift, mx1, mx2, my1, my2, TransformAfterRecifty);
 	
 #endif
@@ -817,6 +848,15 @@ int main( int argc, char** argv )
 		//cv::imshow( "L", LRefectedList[i] );
 		//cv::imshow( "R", RRefectedList[i] );
 		//cv::waitKey(0);
+		char filename[512];
+		char number_str[10];
+		sprintf((char*)number_str,"%08d",i);
+		
+		sprintf( filename, "../undistorted/left-%s.pgm", number_str );
+		cv::imwrite( filename, LRefectedList[i]);
+		
+		sprintf( filename, "../undistorted/right-%s.pgm", number_str );
+		cv::imwrite( filename, RRefectedList[i]);
 		
 	}
 	
@@ -838,25 +878,27 @@ int main( int argc, char** argv )
 		translationList.push_back(T);
 	}
 	
+//#define USE_ELAS
 	//!< init variables
 	Elas::parameters param;
 	param.postprocess_only_left = true;
-	//param.support_threshold = 1;
-	param.disp_min = 0;
-	param.disp_max = (19 + 1) * 16;
+	//param.support_threshold = 0.95;
+	param.disp_min = -(10 + 1) * 16;
+	param.disp_max = (40 + 1) * 16;
 	const int32_t dims[3] = {imgWidth, imgHeight, imgWidth};
 	Elas elas( param );
 	
-cv::Ptr< cv::StereoSGBM > sbm = cv::createStereoSGBM( 0, 5, 11 );
+	cv::Ptr< cv::StereoSGBM > sbm = cv::createStereoSGBM( 0, 5, 11 );
 	sbm->setP1( 600 );
 	sbm->setP2( 2400 );
-	sbm->setBlockSize( (1 + 2) * 2 + 1 );
-	sbm->setNumDisparities( (15 + 1) * 16 );
+	sbm->setBlockSize( (1 + 3) * 2 + 1 );
+	sbm->setMinDisparity( param.disp_min );
+	sbm->setNumDisparities( param.disp_max );
 	
 		
 	//!<init paramaters
 	float Tcov = 0.5;
-	float Tdist = 0.5;
+	float Tdist = 5.0;
 	float Tphoto = 0.7;
 	float patchSize = 7;
 	float pointingError = 0.5;
@@ -902,13 +944,23 @@ cv::Ptr< cv::StereoSGBM > sbm = cv::createStereoSGBM( 0, 5, 11 );
 	
 	boost::thread workerThread(visualize); 
 #endif	
+	
+#ifdef RECORD_TIME
+	//add timer there to find compution cost on each part
+	Timer disparityCost;
+	Timer geometricCost;
+	Timer photometricCost;
+	Timer fuseCost;
+	Timer pointcloudCost;
+#endif
+	
     while ( true )
     {
 		//keyframe selected by minimum distance of camera motion
 		//maybe I can use some simple frame skip to instead it
 		static int framecnt = -1;
 		framecnt++;
-		//fileNum = 70;
+		//fileNum = 5;
 		if (framecnt >= fileNum)
 			break;
 		
@@ -923,12 +975,23 @@ cv::Ptr< cv::StereoSGBM > sbm = cv::createStereoSGBM( 0, 5, 11 );
 		cv::Mat grayRightRefected;
 		cv::cvtColor(leftRefected,grayLeftRefected,CV_BGR2GRAY);
 		cv::cvtColor(rightRefected,grayRightRefected,CV_BGR2GRAY);
-		//elas.process(grayLeftRefected.data, grayRightRefected.data, (float*)imageDisparity.data,(float*)imageDisparity.data, dims);
-		elas.process(grayLeftRefected.data, grayRightRefected.data, (float*)imageDisparity.data,(float*)imageDisparity.data, dims);
+
+#ifdef RECORD_TIME
+		disparityCost.continue_();
+#endif
 		
-		//sbm->compute( grayLeftRefected, grayRightRefected, imageDisparity16 );
-		//imageDisparity16.convertTo( imageDisparity, CV_32F );
-		//imageDisparity = imageDisparity /16;
+#ifdef USE_ELAS
+		elas.process(grayLeftRefected.data, grayRightRefected.data, (float*)imageDisparity.data,(float*)imageDisparity.data, dims);
+#else	
+		sbm->compute( grayLeftRefected, grayRightRefected, imageDisparity16 );
+		//sbm->compute( grayRightRefected, grayLeftRefected, imageDisparity16 );
+		imageDisparity16.convertTo( imageDisparity, CV_32F );
+		imageDisparity = imageDisparity /16;
+#endif
+		
+#ifdef RECORD_TIME
+		disparityCost.pause();
+#endif
 		
 		//!<Record disparity for each frame
 		disparityList.push_back(imageDisparity);
@@ -938,7 +1001,15 @@ cv::Ptr< cv::StereoSGBM > sbm = cv::createStereoSGBM( 0, 5, 11 );
 		double minVal, maxVal;
         minMaxLoc( imageDisparity, &minVal, &maxVal );
 		cv::Mat disp8U(imgHeight, imgWidth, CV_8U);
-        imageDisparity.convertTo( disp8U, CV_8UC1, 255/(maxVal - minVal) );
+        imageDisparity.convertTo( disp8U, CV_8UC1, 255/(maxVal - minVal), 255/(maxVal - minVal) * abs(minVal) );
+		
+		//save disparity here for later check
+		char filename[512];
+		char number_str[10];
+		sprintf((char*)number_str,"%08d",framecnt);
+		sprintf( filename, "../disparityMap/disp-%s.pgm", number_str );
+		cv::imwrite( filename, disp8U);
+		
 		//cv::imshow( "disparity", disp8U );
 		//cv::waitKey( 10 );
 		
@@ -970,7 +1041,7 @@ cv::Ptr< cv::StereoSGBM > sbm = cv::createStereoSGBM( 0, 5, 11 );
 		//center of m stereo view is the keyframe
 		int keyFrame = framecnt - m + r;
 		std::cout<<" start keyframe at "<<keyFrame <<"."<<endl;
-		cv::imshow( "Disparity",  disparityList[framecnt - m + 1] );
+		cv::imshow( "Disparity",  disp8U );
 		cv::imshow( "Left",  LRefectedList[framecnt - m + 1] );
 		cv::waitKey(10);
 		
@@ -1016,15 +1087,16 @@ cv::Ptr< cv::StereoSGBM > sbm = cv::createStereoSGBM( 0, 5, 11 );
 				if (mask.at<char>(i, j) != 0)
 					continue;
 				
-				
+#ifdef RECORD_TIME
+				geometricCost.continue_();
+#endif
 				//*******************************************
 				//Geometric check
 				//*******************************************
-				
 				float d = disparityList[keyFrame].at<float>(i, j);
-				d = d + centerShift;
-				if (d < 0)
+				if (d < param.disp_min || d > param.disp_max)
 					continue;
+				d = d + centerShift;
 				
 				//!<compute 3D point 'hi' under camera's coordinate system 
 				float z = focus * (baseline / d);
@@ -1072,6 +1144,13 @@ cv::Ptr< cv::StereoSGBM > sbm = cv::createStereoSGBM( 0, 5, 11 );
 				bool flgReprojectCheckPassed = true;
 				for (int k = 1; k <= m; k++)
 				{
+					
+					if (k == r)
+					{
+						YiList.push_back(Yi);//save current point's position under current frame
+						weightList.push_back(w);//save point's weight(certainty) under current frame
+						continue;
+					}
 					int currentFrame = framecnt - m + k;
 					cv::Mat& rotation = rotationList.at(currentFrame);/////////////////////////////////////////////////////////currentFrame
 					cv::Mat& translation = translationList.at(currentFrame);/////////////////////////////////////////////////////////currentFrame
@@ -1098,15 +1177,17 @@ cv::Ptr< cv::StereoSGBM > sbm = cv::createStereoSGBM( 0, 5, 11 );
 					
 					//get disparity
 					float d = disparity.at<float>(v, u);
-					d = d + centerShift;
 					
 					//check if disparity is valid
-					if ( !(d > 0 && d < param.disp_max))
+					if ( (d < param.disp_min || d > param.disp_max))
 					{
 						flgReprojectCheckPassed = false;
 						break;
 					}
-
+					
+					d = d + centerShift;
+					
+					
 					//!<check if disparity is low uncertainty
 					//!<Use the same method with wi's check
 					//!<since the Si is already set, we need only to refill the Ji
@@ -1134,9 +1215,9 @@ cv::Ptr< cv::StereoSGBM > sbm = cv::createStereoSGBM( 0, 5, 11 );
 					float x = z * (j - u0) / focus;
 					float y = z * (i - v0) / focus;
 					cv::Mat Yk(1, 3, CV_64F);
-					Yk.at<double>(0,0) = -y;
-					Yk.at<double>(0,1) = -z;
-					Yk.at<double>(0,2) = x;
+					//Yk.at<double>(0,0) = -y;
+					//Yk.at<double>(0,1) = -z;
+					//Yk.at<double>(0,2) = x;
 					//Yk = ( rotation.inv() * Yk.t() + translation.t() ).t();
 					
 					//cv::Mat magicRotation(3, 3, CV_64F);
@@ -1149,9 +1230,22 @@ cv::Ptr< cv::StereoSGBM > sbm = cv::createStereoSGBM( 0, 5, 11 );
 					Yk.at<double>(0,1) = y;
 					Yk.at<double>(0,2) = z;
 					Yk = ( rotation.inv() *  (Yk.t() - translation.t()) ).t();
+					
+					//check if point is stable
+					//cout<<cv::norm(Yk, Yi)<<endl;
+					//cout<<Yk<<endl;
+					//cout<<Yi<<endl;
+					if ( Tdist < cv::norm(Yk, Yi) )
+					{
+						flgReprojectCheckPassed = false;
+						break;
+					}
+					
 					YiList.push_back(Yk);//save current point's position under current frame
 				}
-				
+#ifdef RECORD_TIME
+				geometricCost.pause();
+#endif
 				
 				if(flgReprojectCheckPassed == false)
 					continue;
@@ -1174,6 +1268,9 @@ cv::Ptr< cv::StereoSGBM > sbm = cv::createStereoSGBM( 0, 5, 11 );
 						continue;
 				}*/
 				
+#ifdef RECORD_TIME
+				photometricCost.continue_();
+#endif
 				//*******************************************
 				//Photometric check
 				//*******************************************
@@ -1243,6 +1340,9 @@ cv::Ptr< cv::StereoSGBM > sbm = cv::createStereoSGBM( 0, 5, 11 );
 					gp = gp + NCCScore;
 					
 				}
+#ifdef RECORD_TIME
+				photometricCost.pause();
+#endif
 				if(flgPhotometricCheckPassed == false)
 					continue;
 				gp = gp / 3;
@@ -1250,6 +1350,9 @@ cv::Ptr< cv::StereoSGBM > sbm = cv::createStereoSGBM( 0, 5, 11 );
 					continue;
 				
 				
+#ifdef RECORD_TIME
+				fuseCost.continue_();
+#endif
 				//<!if the pixel passed the both test, fuse it in to point cloud
 				pcl::PointXYZRGB point;
 				point.x = 0;
@@ -1283,12 +1386,18 @@ cv::Ptr< cv::StereoSGBM > sbm = cv::createStereoSGBM( 0, 5, 11 );
 				point.rgb = *reinterpret_cast<float*>(&rgb);
 				
 				currentFrameCloud.push_back(point);
+#ifdef RECORD_TIME
+				fuseCost.pause();
+#endif
 			}
 		}
 		
 		std::cout<<"Geometric & Photometric check finished."<<endl;
 		std::cout<<currentFrameCloud.size()<<" points got."<<endl;
 		
+#ifdef RECORD_TIME
+		pointcloudCost.continue_();
+#endif
 		//*******************************************
 		//Remove outliers
 		//*******************************************
@@ -1302,15 +1411,16 @@ cv::Ptr< cv::StereoSGBM > sbm = cv::createStereoSGBM( 0, 5, 11 );
 				pcl::RadiusOutlierRemoval<pcl::PointXYZRGB> outrem;
 				// build the filter
 				outrem.setInputCloud(currentFrameCloud.makeShared());
-				outrem.setRadiusSearch(0.1);
-				outrem.setMinNeighborsInRadius (2);
+				outrem.setRadiusSearch(0.1* 10);
+				outrem.setMinNeighborsInRadius (5);
 				// apply filter
 				outrem.filter (currentFrameCloud);
+				
 				
 				//!<Use voxel grid to down sample
 				pcl::VoxelGrid<pcl::PointXYZRGB> sor;
 				sor.setInputCloud (currentFrameCloud.makeShared());
-				sor.setLeafSize (0.05f, 0.05f, 0.05f);
+				sor.setLeafSize (0.2f, 0.2f, 0.2f);
 				sor.filter (currentFrameCloudDS);
 			}
 		}
@@ -1326,17 +1436,20 @@ cv::Ptr< cv::StereoSGBM > sbm = cv::createStereoSGBM( 0, 5, 11 );
 // 		{
 // 			globalCloud.push_back(currentFrameCloud.at(i));
 // 		}
+#ifdef RECORD_TIME
+		pointcloudCost.pause();
+#endif
 		
 		
 		//!< save each keyframe's reconstruction result to file
-		char filename[512];
+		//char filename[512];
 		sprintf( filename, "frame-%d.pcd", framecnt );
 		pcl::io::savePCDFileASCII (filename, currentFrameCloud);
 		std::cout<<"PCD outputed."<<endl;
 #ifdef MT_VIEWER
 		boost::mutex::scoped_lock updateLock(updateModelMutex);
 		update = true;
-		currentFileNum = keyFrame;
+		currentFileNum = keyFrame + 1;
 		totalFileNum = fileNum;
 		updateLock.unlock();
 #endif
@@ -1346,6 +1459,14 @@ cv::Ptr< cv::StereoSGBM > sbm = cv::createStereoSGBM( 0, 5, 11 );
 	workerThread.join();
 #endif
 	
+#ifdef RECORD_TIME
+		std::cout<<disparityCost.getElapsed()<<" seconds used in disparity map."<<endl;
+		std::cout<<geometricCost.getElapsed()<<" seconds used in geometric check."<<endl;
+		std::cout<<photometricCost.getElapsed()<<" seconds used in photometric check."<<endl;
+		std::cout<<fuseCost.getElapsed()<<" seconds used in fuse point."<<endl;
+		std::cout<<pointcloudCost.getElapsed()<<" seconds used in pointcloud filtering."<<endl;
+#endif
+
 	//*******************************************
 	//Voxel grid filtering
 	//*******************************************
@@ -1354,7 +1475,7 @@ cv::Ptr< cv::StereoSGBM > sbm = cv::createStereoSGBM( 0, 5, 11 );
 	// Create the filtering object
 	pcl::VoxelGrid<pcl::PointXYZRGB> vox;
 	vox.setInputCloud (globalCloud.makeShared());
-	vox.setLeafSize (0.05f, 0.05f, 0.05f);
+	vox.setLeafSize (0.2f, 0.2f, 0.2f);
 	vox.filter (globalCloud);
 	
 	std::cout<<"down sample finish."<<endl;

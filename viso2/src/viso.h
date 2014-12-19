@@ -139,6 +139,17 @@ protected:
 private:
   
   parameters                    param;     // common parameters
+  
+  
+  // kalman filter
+  Matrix KF_x; // state vector
+  Matrix KF_z; // observation vector
+  Matrix KF_A; // state transition matrix
+  Matrix KF_H; // observation matrix
+  Matrix KF_P; // covariance of state vector
+  Matrix KF_Q; // process noise
+  Matrix KF_R; // measurement covariance
+
 };
 
 #endif // VISO_H

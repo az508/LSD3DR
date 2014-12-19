@@ -351,6 +351,8 @@ inline int16_t Elas::computeMatchingDisparity (const int32_t &u,const int32_t &v
 
       // best + second best match
       if (sum<min_1_E) {
+        min_2_E = min_1_E;   
+        min_2_d = min_1_d;
         min_1_E = sum;
         min_1_d = d;
       } else if (sum<min_2_E) {
@@ -1240,6 +1242,41 @@ void Elas::gapInterpolation(float* D) {
       // otherwise increment counter
       } else {
         count++;
+      }
+    }
+
+    // added extrapolation to top and bottom since bottom rows sometimes stay unlabeled...
+    // DS 5/12/2014
+
+    // if full size disp map requested
+    if (param.add_corners) {
+
+      // extrapolate towards top
+      for (int32_t v=0; v<D_height; v++) {
+
+        // get address of this location
+        addr = getAddressOffsetImage(u,v,D_width);
+
+        // if disparity valid
+        if (*(D+addr)>=0) {
+          for (int32_t v2=max(v-D_ipol_gap_width,0); v2<v; v2++)
+            *(D+getAddressOffsetImage(u,v2,D_width)) = *(D+addr);
+          break;
+        }
+      }
+
+      // extrapolate towards the bottom
+      for (int32_t v=D_height-1; v>=0; v--) {
+
+        // get address of this location
+        addr = getAddressOffsetImage(u,v,D_width);
+
+        // if disparity valid
+        if (*(D+addr)>=0) {
+          for (int32_t v2=v; v2<=min(v+D_ipol_gap_width,D_height-1); v2++)
+            *(D+getAddressOffsetImage(u,v2,D_width)) = *(D+addr);
+          break;
+        }
       }
     }
   }

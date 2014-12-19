@@ -1163,9 +1163,9 @@ void Matcher::matching (int32_t *m1p,int32_t *m2p,int32_t *m1c,int32_t *m2c,
         double y2c = T10*x1c + T11*y1c + T12*z1c + T13*1;
         double z2c = T20*x1c + T21*y1c + T22*z1c + T23*1;
 		
-		//double x2c = x1c + param.base;
-        //double y2c = y1c;
-        //double z2c = z1c;
+		 x2c = x1c - param.base;
+         y2c = y1c;
+         z2c = z1c;
 
         double u2c_ = param.f*x2c/z2c+param.cu1;
         double v2c_ = param.f*y2c/z2c+param.cv1;
@@ -1188,7 +1188,7 @@ void Matcher::matching (int32_t *m1p,int32_t *m2p,int32_t *m1c,int32_t *m2c,
         u1c = *(m1c+step_size*i1c+0); v1c = *(m1c+step_size*i1c+1);
 
         // if disparities are positive
-        if (u1p>=u2p && u1c>=u2c) {
+        if ((u1p - param.cu)>=(u2p - param.cu1) && (u1c - param.cu)>=(u2c-param.cu1)) {
           
           // add match
           p_matched.push_back(Matcher::p_match(u1p,v1p,i1p,u2p,v2p,i2p,

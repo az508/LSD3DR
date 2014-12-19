@@ -99,10 +99,10 @@ public:
 	T20 = TransformAfterRecifty[8], T21 = TransformAfterRecifty[9], T22 = TransformAfterRecifty[10], T23 = TransformAfterRecifty[11],
 	T30 = TransformAfterRecifty[12], T31 = TransformAfterRecifty[13], T32 = TransformAfterRecifty[14], T33 = TransformAfterRecifty[15];
 	
-// 			T00 = 0.9998, T01 = -0.0000123, T02 = -0.0198, T03 = -41.7890,
-// 			T10 = 0.00006996, T11 = 0.9999, T12 = 0.00291, T13 = -0.00204,
-// 			T20 = 0.0198, T21 = -0.00291, T22 = 0.998, T23 = -0.06416,
-// 			T30 = 0, T31 = 0, T32 = 0, T33 = 1;
+			T00 = 1, T01 = 0, T02 = 0, T03 = -41.7890,
+			T10 = 0, T11 = 1, T12 = 0, T13 = 0,
+			T20 = 0, T21 = 0, T22 = 1, T23 = 0,
+			T30 = 0, T31 = 0, T32 = 0, T33 = 1;
   }
 
   // structure for storing matches
